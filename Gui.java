@@ -13,11 +13,15 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
-import java.util.Arrays;
-import java.util.Scanner;
+import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
+import javax.swing.JFormattedTextField;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
+import javax.swing.text.MaskFormatter;
 
 /**
  *
@@ -25,31 +29,39 @@ import javax.swing.JOptionPane;
  */
 public class Gui extends javax.swing.JFrame {
 
-    private SerialPort comPort;
-    private int baud;
+    Serial ser = new Serial();
+    int baud = 9600;
+    int dataBits = 8;
+    int stopBits = 1;
+    int parity = 0;
 
     public Gui() {
         initComponents();
+
         SerialPort[] computerPorts = SerialPort.getCommPorts();
+
         for (SerialPort p : computerPorts) {
             this.portList.addItem(p.getSystemPortName());
         }
         this.setTitle("Serial Reader & Writer");
         Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
         this.setLocation(dim.width / 2 - this.getSize().width / 2, dim.height / 2 - this.getSize().height / 2);
+        this.Hello_World.setEnabled(false);
+        this.Long_List.setEnabled(false);
+        this.Output.setEditable(false);
         this.jButton1.setEnabled(false);
         this.jButton2.setEnabled(false);
-        this.Output.setEditable(false);
+        this.jButton3.setEnabled(false);
         connectButton.setBackground(Color.green);
         this.ClearButton.setBackground(Color.yellow);
         this.pack();
+        //comPort.setBaudRate(9600);
     }
 
-    private void writeto(String command) {
+    /*private void writeto(String command) {
         byte[] buffer = command.getBytes();
         comPort.writeBytes(buffer, buffer.length);
-    }
-
+    }*/
     /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
@@ -67,7 +79,6 @@ public class Gui extends javax.swing.JFrame {
         jMenu2 = new javax.swing.JMenu();
         jFileChooser1 = new javax.swing.JFileChooser();
         jFileChooser2 = new javax.swing.JFileChooser();
-        jFrame1 = new javax.swing.JFrame();
         portList = new javax.swing.JComboBox<>();
         connectButton = new javax.swing.JButton();
         jScrollPane1 = new javax.swing.JScrollPane();
@@ -76,15 +87,17 @@ public class Gui extends javax.swing.JFrame {
         ClearButton = new javax.swing.JButton();
         jSeparator1 = new javax.swing.JSeparator();
         jLabel4 = new javax.swing.JLabel();
-        BaudCombo = new javax.swing.JComboBox<>();
-        jLabel3 = new javax.swing.JLabel();
         jPanel1 = new javax.swing.JPanel();
+        Hello_World = new javax.swing.JButton();
+        Long_List = new javax.swing.JButton();
+        jButton3 = new javax.swing.JButton();
         jButton1 = new javax.swing.JButton();
         jButton2 = new javax.swing.JButton();
         jMenuBar2 = new javax.swing.JMenuBar();
         jMenu3 = new javax.swing.JMenu();
         SaveButton = new javax.swing.JMenuItem();
         jMenu4 = new javax.swing.JMenu();
+        SettingsMenuItem = new javax.swing.JMenuItem();
         About = new javax.swing.JMenuItem();
 
         menu1.setLabel("File");
@@ -98,17 +111,6 @@ public class Gui extends javax.swing.JFrame {
 
         jMenu2.setText("Edit");
         jMenuBar1.add(jMenu2);
-
-        javax.swing.GroupLayout jFrame1Layout = new javax.swing.GroupLayout(jFrame1.getContentPane());
-        jFrame1.getContentPane().setLayout(jFrame1Layout);
-        jFrame1Layout.setHorizontalGroup(
-            jFrame1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 400, Short.MAX_VALUE)
-        );
-        jFrame1Layout.setVerticalGroup(
-            jFrame1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 300, Short.MAX_VALUE)
-        );
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -134,38 +136,49 @@ public class Gui extends javax.swing.JFrame {
 
         jLabel4.setText("Port");
 
-        BaudCombo.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "9600", "14400", "19200", "28800", "38400", "57600", "115200", "230400", "250000", "500000", "1000000", "2000000" }));
-
-        jLabel3.setText("Baud Rate");
-
-        jButton1.setText("Hello World");
-        jButton1.addActionListener(new java.awt.event.ActionListener() {
+        Hello_World.setText("Hello World");
+        Hello_World.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jButton1ActionPerformed(evt);
+                Hello_WorldActionPerformed(evt);
             }
         });
 
-        jButton2.setText("Long List of Words");
-        jButton2.addActionListener(new java.awt.event.ActionListener() {
+        Long_List.setText("Long List of Words");
+        Long_List.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jButton2ActionPerformed(evt);
+                Long_ListActionPerformed(evt);
             }
         });
+
+        jButton3.setText("Random Button1");
+
+        jButton1.setText("Random Button2");
+
+        jButton2.setText("Random Button3");
 
         javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
         jPanel1.setLayout(jPanel1Layout);
         jPanel1Layout.setHorizontalGroup(
             jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jButton3, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addComponent(Hello_World, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addComponent(Long_List, javax.swing.GroupLayout.DEFAULT_SIZE, 132, Short.MAX_VALUE)
             .addComponent(jButton1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-            .addComponent(jButton2, javax.swing.GroupLayout.DEFAULT_SIZE, 140, Short.MAX_VALUE)
+            .addComponent(jButton2, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
         );
         jPanel1Layout.setVerticalGroup(
             jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel1Layout.createSequentialGroup()
-                .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 41, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(Hello_World, javax.swing.GroupLayout.PREFERRED_SIZE, 41, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jButton2, javax.swing.GroupLayout.PREFERRED_SIZE, 41, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(156, Short.MAX_VALUE))
+                .addComponent(Long_List, javax.swing.GroupLayout.PREFERRED_SIZE, 41, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jButton2, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(32, Short.MAX_VALUE))
         );
 
         jMenu3.setText("File");
@@ -181,6 +194,14 @@ public class Gui extends javax.swing.JFrame {
         jMenuBar2.add(jMenu3);
 
         jMenu4.setText("Edit");
+
+        SettingsMenuItem.setText("Settings");
+        SettingsMenuItem.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                SettingsMenuItemActionPerformed(evt);
+            }
+        });
+        jMenu4.add(SettingsMenuItem);
 
         About.setText("About");
         About.addActionListener(new java.awt.event.ActionListener() {
@@ -200,31 +221,28 @@ public class Gui extends javax.swing.JFrame {
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addComponent(jSeparator1)
             .addGroup(layout.createSequentialGroup()
-                .addContainerGap()
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addGroup(layout.createSequentialGroup()
-                                .addComponent(jLabel4)
-                                .addGap(14, 14, 14)
-                                .addComponent(portList, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-                            .addGroup(layout.createSequentialGroup()
-                                .addComponent(jLabel3, javax.swing.GroupLayout.PREFERRED_SIZE, 84, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 32, Short.MAX_VALUE)
-                                .addComponent(BaudCombo, javax.swing.GroupLayout.PREFERRED_SIZE, 145, javax.swing.GroupLayout.PREFERRED_SIZE)))
-                        .addGap(6, 6, 6)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(connectButton, javax.swing.GroupLayout.PREFERRED_SIZE, 104, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(ClearButton, javax.swing.GroupLayout.PREFERRED_SIZE, 104, javax.swing.GroupLayout.PREFERRED_SIZE))
-                        .addContainerGap(38, Short.MAX_VALUE))
-                    .addGroup(layout.createSequentialGroup()
-                        .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 253, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addContainerGap()
+                        .addComponent(jLabel4)
+                        .addGap(14, 14, 14)
+                        .addComponent(portList, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                        .addContainerGap())
+                        .addComponent(connectButton, javax.swing.GroupLayout.PREFERRED_SIZE, 104, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(ClearButton, javax.swing.GroupLayout.PREFERRED_SIZE, 104, javax.swing.GroupLayout.PREFERRED_SIZE))
                     .addGroup(layout.createSequentialGroup()
-                        .addComponent(jLabel1)
-                        .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
+                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addGroup(layout.createSequentialGroup()
+                                .addContainerGap()
+                                .addComponent(jLabel1)
+                                .addGap(217, 217, 217))
+                            .addGroup(layout.createSequentialGroup()
+                                .addGap(0, 0, Short.MAX_VALUE)
+                                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 224, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)))
+                        .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
+                .addContainerGap())
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -233,17 +251,13 @@ public class Gui extends javax.swing.JFrame {
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(connectButton)
                     .addComponent(portList, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jLabel4))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(ClearButton)
-                    .addComponent(BaudCombo, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jLabel3, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                    .addComponent(jLabel4)
+                    .addComponent(ClearButton))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                 .addComponent(jSeparator1, javax.swing.GroupLayout.PREFERRED_SIZE, 10, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(1, 1, 1)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jLabel1)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addComponent(jScrollPane1)
                     .addGroup(layout.createSequentialGroup()
@@ -256,86 +270,72 @@ public class Gui extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void connectButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_connectButtonActionPerformed
-        if (connectButton.getText().equals("Connect")) {
-            baud = Integer.parseInt(this.BaudCombo.getItemAt(this.BaudCombo.getSelectedIndex()));
-            this.BaudCombo.setEnabled(false);
-            this.jButton1.setEnabled(true);
-            this.jButton2.setEnabled(true);
-            connectButton.setBackground(Color.red);
-            // connect to serial port and set parameters
-            comPort = com.fazecast.jSerialComm.SerialPort.getCommPort(portList.getSelectedItem().toString());
-            comPort.setComPortParameters(baud, 8, 1, SerialPort.NO_PARITY);
-            comPort.setComPortTimeouts(com.fazecast.jSerialComm.SerialPort.TIMEOUT_SCANNER, 0, 0);
-            //if the comport is open make the connect button the disconnect button & disable changing the port
-            if (comPort.openPort()) {
-                connectButton.setText("Disconnect");
-                portList.setEnabled(false);
-            }
+        if (this.portList.getItemCount() > 0) {
+            if (connectButton.getText().equals("Connect")) {
+                this.Hello_World.setEnabled(true);
+                this.Long_List.setEnabled(true);
+                this.jButton1.setEnabled(true);
+                this.jButton2.setEnabled(true);
+                this.jButton3.setEnabled(true);
+                connectButton.setBackground(Color.red);
+                // attempt to connect to the serial port
+                //comPort = com.fazecast.jSerialComm.SerialPort.getCommPort(portList.getSelectedItem().toString());
+                //comPort.setComPortParameters(baud, 8, 1, SerialPort.NO_PARITY);
+                //comPort.setComPortTimeouts(com.fazecast.jSerialComm.SerialPort.TIMEOUT_SCANNER, 0, 0);
 
-            // create a new thread
-            Thread thread = new Thread() {
-                @Override
-                public void run() {
-                    //set the scanner to the correct COM port
-                    try (Scanner scanner = new Scanner(comPort.getInputStream())) {
-                        //while theres data in the input
-                        while (scanner.hasNextLine()) {
-                            try {
-                                String line = scanner.nextLine();
-                                //append to output line count+info from serial+NL
-                                Output.append(Output.getLineCount() + ": " + line + "\n");
-                                //keeps the newest line on the textarea Output
-                                Output.setCaretPosition(Output.getDocument().getLength());
-                            } catch (Exception e) {
-                                //print stack
-                                System.out.print(Arrays.toString(e.getStackTrace()));
-                            }
-                        }
-                    }
+                ser.connectTo(portList.getSelectedItem().toString());
+                ser.setPortParameters(baud, dataBits, stopBits, parity);
+                if (ser.openPort()) {
+                    connectButton.setText("Disconnect");
+                    portList.setEnabled(false);
                 }
-            };
-            thread.start();
+
+                // create a new thread that listens for incoming text and populates the graph
+                Thread thread = new Thread() {
+                    @Override
+                    public void run() {
+                        Output.append(Output.getLineCount() + ": " + ser.getData() + "\n");
+                        Output.setCaretPosition(Output.getDocument().getLength());
+                    }
+                };
+                thread.start();
+            } else {
+                // disconnect from the serial port
+                ser.closePort();
+                portList.setEnabled(true);
+                connectButton.setText("Connect");
+                connectButton.setBackground(Color.green);
+                this.Hello_World.setEnabled(false);
+                this.Long_List.setEnabled(false);
+                this.jButton1.setEnabled(false);
+                this.jButton2.setEnabled(false);
+                this.jButton3.setEnabled(false);
+            }
         } else {
-            // disconnect from the serial port
-            comPort.closePort();
-            portList.setEnabled(true);
-            connectButton.setText("Connect");
-            connectButton.setBackground(Color.green);
-            this.jButton1.setEnabled(false);
-            this.jButton2.setEnabled(false);
-            this.BaudCombo.setEnabled(true);
+            JOptionPane.showMessageDialog(null, "No COM Ports selected!", "ERROR", JOptionPane.ERROR_MESSAGE);
         }
     }//GEN-LAST:event_connectButtonActionPerformed
 
-    private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
-        //write whatever you want but put a \n at the end if Arduino
-        writeto("v\n");
-    }//GEN-LAST:event_jButton1ActionPerformed
+    private void Hello_WorldActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_Hello_WorldActionPerformed
+        ser.writeto("v\n");
+    }//GEN-LAST:event_Hello_WorldActionPerformed
 
     private void ClearButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_ClearButtonActionPerformed
-        //clear output
         this.Output.setText("");
     }//GEN-LAST:event_ClearButtonActionPerformed
 
     private void AboutActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_AboutActionPerformed
-        //display info
         JOptionPane.showMessageDialog(null, "Serial Reader and Writer", "INFO", JOptionPane.INFORMATION_MESSAGE);
     }//GEN-LAST:event_AboutActionPerformed
 
     private void SaveButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_SaveButtonActionPerformed
-        
         JFrame parentFrame = new JFrame();
-        //create file chooser
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Specify a file to save");
         int userSelection = fileChooser.showSaveDialog(parentFrame);
-        //if accept the save button
         if (userSelection == JFileChooser.APPROVE_OPTION) {
             File fileToSave = fileChooser.getSelectedFile();
-            //try to write the .txt file to location
-            //buffered writer with file path and file type
-            try (Writer output = new BufferedWriter(new FileWriter(fileToSave + ".txt", true));) {
-                //take output and split up by newline
+            try (Writer output = new BufferedWriter(new FileWriter(fileToSave + ".txt", true));) {//new buffered writer with file path
                 String[] lines = Output.getText().split("\\n");
                 for (String line : lines) {
                     output.append(line); //add to end of document
@@ -348,10 +348,8 @@ public class Gui extends javax.swing.JFrame {
         }
     }//GEN-LAST:event_SaveButtonActionPerformed
 
-    private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
-        //write whatever you want but put a \n at the end if Arduino
-        //this is to test the limit of this program and the receiver by sending large ammounts of data
-        writeto("aviation\n"
+    private void Long_ListActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_Long_ListActionPerformed
+        ser.writeto("aviation\n"
                 + "crack\n"
                 + "stomach\n"
                 + "activity\n"
@@ -951,7 +949,64 @@ public class Gui extends javax.swing.JFrame {
                 + "guideline\n"
                 + "cold\n"
                 + "cemetery\n");
-    }//GEN-LAST:event_jButton2ActionPerformed
+    }//GEN-LAST:event_Long_ListActionPerformed
+
+    private void SettingsMenuItemActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_SettingsMenuItemActionPerformed
+        String[] Bauds = {"9600", "14400", "19200", "28800", "38400", "57600", "115200", "230400", "250000", "500000", "1000000", "2000000"};
+        JComboBox<String> BaudCombo = new JComboBox<>(Bauds);
+        String[] Paritys = {"None", "Odd", "Even", "Mark", "Space"};
+        JComboBox<String> ParityCombo = new JComboBox<>(Paritys);
+        JTextField Data = new JFormattedTextField(createFormatter("##"));
+        Data.setText("8");
+        JTextField Stop = new JFormattedTextField(createFormatter("##"));
+        Stop.setText("1");
+        JPanel panel = new JPanel(new GridLayout(0, 1));
+        panel.add(new JLabel("Baud"));
+        panel.add(BaudCombo);
+        panel.add(new JLabel("Data Bits:"));
+        panel.add(Data);
+        panel.add(new JLabel("Stop Bits:"));
+        panel.add(Stop);
+        panel.add(new JLabel("Parity"));
+        panel.add(ParityCombo);
+        int result = JOptionPane.showConfirmDialog(null, panel, "Settings",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result == JOptionPane.OK_OPTION) {
+            BaudCombo.getSelectedItem();
+
+            baud = Integer.parseInt(BaudCombo.getItemAt(BaudCombo.getSelectedIndex()));
+            dataBits = Integer.parseInt(Data.getText().trim());
+            stopBits = Integer.parseInt(Stop.getText().trim());
+            String temp = ParityCombo.getItemAt(ParityCombo.getSelectedIndex());
+            switch (temp) {
+                case "None":
+                    parity = 0;
+                    break;
+                case "Odd":
+                    parity = 1;
+                    break;
+                case "Even":
+                    parity = 2;
+                    break;
+                case "Mark":
+                    parity = 3;
+                    break;
+                case "Space":
+                    parity = 4;
+                    break;
+                default:
+                    parity = 0;
+            }
+        }
+    }//GEN-LAST:event_SettingsMenuItemActionPerformed
+    protected MaskFormatter createFormatter(String s) {
+        MaskFormatter formatter = null;
+        try {
+            formatter = new MaskFormatter(s);
+        } catch (java.text.ParseException exc) {
+        }
+        return formatter;
+    }
 
     /**
      * @param args the command line arguments
@@ -967,10 +1022,13 @@ public class Gui extends javax.swing.JFrame {
                 if ("Nimbus".equals(info.getName())) {
                     javax.swing.UIManager.setLookAndFeel(info.getClassName());
                     break;
+
                 }
             }
         } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | javax.swing.UnsupportedLookAndFeelException ex) {
-            java.util.logging.Logger.getLogger(Gui.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+            java.util.logging.Logger.getLogger(Gui.class
+                    .getName()).log(java.util.logging.Level.SEVERE, null, ex);
+
         }
         //</editor-fold>
 
@@ -984,18 +1042,19 @@ public class Gui extends javax.swing.JFrame {
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JMenuItem About;
-    private javax.swing.JComboBox<String> BaudCombo;
     private javax.swing.JButton ClearButton;
+    private javax.swing.JButton Hello_World;
+    private javax.swing.JButton Long_List;
     private javax.swing.JTextArea Output;
     private javax.swing.JMenuItem SaveButton;
+    private javax.swing.JMenuItem SettingsMenuItem;
     private javax.swing.JButton connectButton;
     private javax.swing.JButton jButton1;
     private javax.swing.JButton jButton2;
+    private javax.swing.JButton jButton3;
     private javax.swing.JFileChooser jFileChooser1;
     private javax.swing.JFileChooser jFileChooser2;
-    private javax.swing.JFrame jFrame1;
     private javax.swing.JLabel jLabel1;
-    private javax.swing.JLabel jLabel3;
     private javax.swing.JLabel jLabel4;
     private javax.swing.JMenu jMenu1;
     private javax.swing.JMenu jMenu2;
