@@ -58,7 +58,7 @@ jobs:
     #    uses a compiled language
 
     - run: |
-        mvn build
+        mvn package
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v1
