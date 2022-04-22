@@ -72,4 +72,4 @@ jobs:
       uses: actions/upload-artifact@v3.0.0
       with:
         # A file, directory or wildcard pattern that describes what to upload
-        path: ./*.jar
+        path: /home/runner/work/Serial_Talker_Logger/Serial_Talker_Logger/target/*.jar
