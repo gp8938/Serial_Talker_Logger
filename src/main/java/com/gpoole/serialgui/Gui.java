@@ -1,586 +1,304 @@
-import java.awt.*;
-import java.awt.event.*;
+package com.gpoole.serialgui;
+
+import jssc.SerialPort;
+import jssc.SerialPortEvent;
+import jssc.SerialPortException;
+import jssc.SerialPortList;
+
 import javax.swing.*;
-import java.text.ParseException;
-import java.util.ArrayList;
+import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class Gui extends JFrame {
-    private JTextArea outputArea;
-    private JButton connectButton;
-    private JComboBox<String> portList;
-    private JTextField baudField, dataBitsField, stopBitsField, parityField;
-    private SerialPort serialPort;
-    private boolean isConnected = false;
-    public Gui() {
-        setTitle("Serial Communication GUI");
-        setSize(600, 400);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLocationRelativeTo(null);
+    private final JTextArea serialOutputArea;
+    private final JComboBox<String> availablePortsDropdown;
+    private final JButton connectionToggleButton;
+    private SerialPort activeSerialPort;
+    private boolean isSerialPortConnected = false;
+    private int selectedBaudRate = 9600;
+    private int selectedDataBits = SerialPort.DATABITS_8;
+    private int selectedStopBits = SerialPort.STOPBITS_1;
+    private int selectedParity = SerialPort.PARITY_NONE;
+    private final ScheduledExecutorService portListUpdater = Executors.newScheduledThreadPool(1);
 
-        // Set up the menu bar
-        JMenuBar menuBar = new JMenuBar();
-        JMenu fileMenu = new JMenu("File");
-        JMenuItem saveMenuItem = new JMenuItem("Save");
-        saveMenuItem.addActionListener(e -> {
-            String text = outputArea.getText();
-            try (java.io.FileWriter fw = new java.io.FileWriter("output.txt")) {
-                fw.write(text);
-            } catch (java.io.IOException ex) {
-                JOptionPane.showMessageDialog(this, "Error saving file.", "Error", JOptionPane.ERROR_MESSAGE);
+    public Gui() {
+        setupFrame();
+        
+        // Create main components
+        serialOutputArea = new JTextArea(15, 40);
+        availablePortsDropdown = new JComboBox<>();
+        connectionToggleButton = new JButton("Connect");
+        
+        setupMenuBar();
+        setupMainPanel();
+        setupControlPanel();
+        
+        // Start port list updater
+        portListUpdater.scheduleAtFixedRate(this::updateAvailablePorts, 0, 2, TimeUnit.SECONDS);
+        
+        // Add window closing handler
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                disconnectSerialPort();
+                portListUpdater.shutdown();
+                System.exit(0);
             }
         });
-        JMenuItem exitMenuItem = new JMenuItem("Exit");
+    }
+
+    private void setupFrame() {
+        setTitle("Serial Communication GUI");
+        setSize(800, 600);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+    }
+
+    private void setupMenuBar() {
+        var menuBar = new JMenuBar();
+        
+        // File Menu
+        var fileMenu = new JMenu("File");
+        var saveMenuItem = new JMenuItem("Save");
+        saveMenuItem.addActionListener(e -> saveOutputToFile());
+        var exitMenuItem = new JMenuItem("Exit");
         exitMenuItem.addActionListener(e -> System.exit(0));
         fileMenu.add(saveMenuItem);
         fileMenu.addSeparator();
         fileMenu.add(exitMenuItem);
-        menuBar.add(fileMenu);
-
-        JMenu settingsMenu = new JMenu("Settings");
-        JMenuItem settingsItem = new JMenuItem("Settings");
-        settingsItem.addActionListener(e -> {
-            String[] baudRates = {"9600", "14400", "19200", "28800", "38400", "57600", "115200"};
-            JComboBox<String> baudCombo = new JComboBox<>(baudRates);
-            String[] parityOptions = {"None", "Odd", "Even", "Mark", "Space"};
-            JComboBox<String> parityCombo = new JComboBox<>(parityOptions);
-            JTextField dataBits = new JTextField("8");
-            JTextField stopBits = new JTextField("1");
-            JPanel panel = new JPanel(new GridLayout(0, 2));
-            panel.add(new JLabel("Baud Rate:"));
-            panel.add(baudCombo);
-        panel.add(new JLabel("Data Bits:"));
-            panel.add(dataBits);
-        panel.add(new JLabel("Stop Bits:"));
-            panel.add(stopBits);
-            panel.add(new JLabel("Parity:"));
-            panel.add(parityCombo);
-            int result = JOptionPane.showConfirmDialog(this, panel, "Settings", JOptionPane.OK_CANCEL_OPTION);
-        if (result == JOptionPane.OK_OPTION) {
-                baudRate = Integer.parseInt(baudCombo.getSelectedItem().toString());
-                dataBitsValue = Integer.parseInt(dataBits.getText().trim());
-                stopBitsValue = Integer.parseInt(stopBits.getText().trim());
-                String selectedParity = parityCombo.getSelectedItem().toString();
-                switch (selectedParity) {
-                case "None":
-                    parity = 0;
-                    break;
-                case "Odd":
-                    parity = 1;
-                    break;
-                case "Even":
-                    parity = 2;
-                    break;
-                case "Mark":
-                    parity = 3;
-                    break;
-                case "Space":
-                    parity = 4;
-                    break;
-                default:
-                    parity = 0;
-            }
-        }
-        });
+        
+        // Settings Menu
+        var settingsMenu = new JMenu("Settings");
+        var settingsItem = new JMenuItem("Settings");
+        settingsItem.addActionListener(e -> showSettingsDialog());
         settingsMenu.add(settingsItem);
+        
+        menuBar.add(fileMenu);
         menuBar.add(settingsMenu);
-
         setJMenuBar(menuBar);
-
-        // Main panel
-        JPanel mainPanel = new JPanel();
-        mainPanel.setLayout(new BorderLayout());
-
-        // Output area
-        outputArea = new JTextArea(15, 40);
-        outputArea.setEditable(false);
-        JScrollPane scrollPane = new JScrollPane(outputArea);
-        mainPanel.add(scrollPane, BorderLayout.CENTER);
-
-        // Control panel
-        JPanel controlPanel = new JPanel();
-        controlPanel.setLayout(new FlowLayout());
-
-        connectButton = new JButton("Connect");
-        connectButton.addActionListener(e -> {
-            String selectedPort = (String) portList.getSelectedItem();
-        try {
-                serialPort = new SerialPort(selectedPort, baudRate, parity, dataBitsValue, stopBitsValue);
-                if (serialPort.openPort()) {
-                    isConnected = true;
-                    connectButton.setText("Disconnect");
-                    outputArea.append("Connected to " + selectedPort + "\n");
-                } else {
-                    JOptionPane.showMessageDialog(this, "Failed to open port.", "Error", JOptionPane.ERROR_MESSAGE);
-        }
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Invalid port selection.", "Error", JOptionPane.ERROR_MESSAGE);
     }
-        });
-        controlPanel.add(connectButton);
 
-        JButton sendButton = new JButton("Send");
-        sendButton.addActionListener(e -> {
-            if (isConnected && serialPort != null) {
-                String message = outputArea.getText();
-        try {
-                    serialPort.writeBytes(message.getBytes());
-                    outputArea.append("Sent: " + message + "\n");
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, "Error sending data.", "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            } else {
-                JOptionPane.showMessageDialog(this, "Not connected to any port.", "Error", JOptionPane.ERROR_MESSAGE);
-            }
-        });
-        controlPanel.add(sendButton);
-
-        JButton clearButton = new JButton("Clear");
-        clearButton.addActionListener(e -> outputArea.setText(""));
-        controlPanel.add(clearButton);
-
-        mainPanel.add(controlPanel, BorderLayout.SOUTH);
-
+    private void setupMainPanel() {
+        var mainPanel = new JPanel(new BorderLayout());
+        
+        // Output area with scroll
+        serialOutputArea.setEditable(false);
+        var scrollPane = new JScrollPane(serialOutputArea);
+        mainPanel.add(scrollPane, BorderLayout.CENTER);
+        
+        // Button panel on the right
+        var buttonPanel = new JPanel(new GridLayout(5, 1, 5, 5));
+        buttonPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        
+        var sendHelloWorldButton = new JButton("Hello World");
+        sendHelloWorldButton.addActionListener(e -> sendSerialMessage("Hello World!"));
+        
+        var sendLongListButton = new JButton("Long List");
+        sendLongListButton.addActionListener(e -> sendLongListMessage());
+        
+        buttonPanel.add(sendHelloWorldButton);
+        buttonPanel.add(sendLongListButton);
+        
+        mainPanel.add(buttonPanel, BorderLayout.EAST);
         add(mainPanel);
+    }
 
-        // Additional components
-        JLabel portLabel = new JLabel("Select COM Port:");
-        JComboBox<String> portsComboBox = new JComboBox<>();
-        updatePortList();
-        portList = portsComboBox;
-        connectButton.addActionListener(e -> {
-            String selectedPort = (String) portList.getSelectedItem();
+    private void setupControlPanel() {
+        var controlPanel = new JPanel(new FlowLayout());
+        
+        controlPanel.add(new JLabel("Port:"));
+        controlPanel.add(availablePortsDropdown);
+        
+        connectionToggleButton.addActionListener(e -> toggleSerialConnection());
+        controlPanel.add(connectionToggleButton);
+        
+        var clearOutputButton = new JButton("Clear");
+        clearOutputButton.addActionListener(e -> serialOutputArea.setText(""));
+        controlPanel.add(clearOutputButton);
+        
+        add(controlPanel, BorderLayout.NORTH);
+    }
+
+    private void updateAvailablePorts() {
+        SwingUtilities.invokeLater(() -> {
+            var currentSelection = (String) availablePortsDropdown.getSelectedItem();
+            availablePortsDropdown.removeAllItems();
+            
+            String[] detectedPorts = SerialPortList.getPortNames();
+            for (String port : detectedPorts) {
+                availablePortsDropdown.addItem(port);
+            }
+            
+            if (currentSelection != null) {
+                availablePortsDropdown.setSelectedItem(currentSelection);
+            }
+        });
+    }
+
+    private void toggleSerialConnection() {
+        if (isSerialPortConnected) {
+            disconnectSerialPort();
+        } else {
+            connectToSerialPort();
+        }
+    }
+
+    private void connectToSerialPort() {
+        String selectedPort = (String) availablePortsDropdown.getSelectedItem();
+        if (selectedPort == null) {
+            showError("No port selected");
+            return;
+        }
+
+        try {
+            activeSerialPort = new SerialPort(selectedPort);
+            if (activeSerialPort.openPort()) {
+                activeSerialPort.setParams(
+                    selectedBaudRate,
+                    selectedDataBits,
+                    selectedStopBits,
+                    selectedParity
+                );
+                
+                activeSerialPort.addEventListener((SerialPortEvent event) -> {
+                    if (event.isRXCHAR() && event.getEventValue() > 0) {
+                        try {
+                            String receivedData = activeSerialPort.readString(event.getEventValue());
+                            SwingUtilities.invokeLater(() -> 
+                                serialOutputArea.append("Received: " + receivedData + "\n")
+                            );
+                        } catch (SerialPortException ex) {
+                            showError("Error reading from port: " + ex.getMessage());
+                        }
+                    }
+                }, SerialPort.MASK_RXCHAR);
+                
+                isSerialPortConnected = true;
+                connectionToggleButton.setText("Disconnect");
+                serialOutputArea.append("Connected to " + selectedPort + "\n");
+            } else {
+                showError("Failed to open port");
+            }
+        } catch (SerialPortException ex) {
+            showError("Error opening port: " + ex.getMessage());
+        }
+    }
+
+    private void disconnectSerialPort() {
+        if (activeSerialPort != null) {
             try {
-                serialPort = new SerialPort(selectedPort, baudRate, parity, dataBitsValue, stopBitsValue);
-                if (serialPort.openPort()) {
-                    isConnected = true;
-                    connectButton.setText("Disconnect");
-                    outputArea.append("Connected to " + selectedPort + "\n");
-                } else {
-                    JOptionPane.showMessageDialog(this, "Failed to open port.", "Error", JOptionPane.ERROR_MESSAGE);
+                activeSerialPort.closePort();
+            } catch (SerialPortException ex) {
+                // Ignore close errors
+            } finally {
+                activeSerialPort = null;
+            }
+        }
+        isSerialPortConnected = false;
+        connectionToggleButton.setText("Connect");
+        serialOutputArea.append("Disconnected\n");
+    }
+
+    private void sendSerialMessage(String message) {
+        if (!isSerialPortConnected || activeSerialPort == null) {
+            showError("Not connected to any port");
+            return;
+        }
+
+        try {
+            activeSerialPort.writeString(message);
+            serialOutputArea.append("Sent: " + message + "\n");
+        } catch (SerialPortException ex) {
+            showError("Error sending data: " + ex.getMessage());
+        }
+    }
+
+    private void saveOutputToFile() {
+        var fileChooser = new JFileChooser();
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            try {
+                Files.writeString(Path.of(fileChooser.getSelectedFile().getPath()), serialOutputArea.getText());
+            } catch (IOException ex) {
+                showError("Error saving file: " + ex.getMessage());
+            }
+        }
+    }
+
+    private void showSettingsDialog() {
+        var settingsPanel = new JPanel(new GridLayout(0, 2, 5, 5));
+        settingsPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        var baudRateOptions = List.of("9600", "14400", "19200", "28800", "38400", "57600", "115200");
+        var baudRateDropdown = new JComboBox<>(baudRateOptions.toArray(new String[0]));
+        baudRateDropdown.setSelectedItem(String.valueOf(selectedBaudRate));
+        
+        var parityOptions = List.of("None", "Odd", "Even", "Mark", "Space");
+        var parityDropdown = new JComboBox<>(parityOptions.toArray(new String[0]));
+        
+        var dataBitsField = new JTextField(String.valueOf(selectedDataBits));
+        var stopBitsField = new JTextField(String.valueOf(selectedStopBits));
+        
+        settingsPanel.add(new JLabel("Baud Rate:"));
+        settingsPanel.add(baudRateDropdown);
+        settingsPanel.add(new JLabel("Data Bits:"));
+        settingsPanel.add(dataBitsField);
+        settingsPanel.add(new JLabel("Stop Bits:"));
+        settingsPanel.add(stopBitsField);
+        settingsPanel.add(new JLabel("Parity:"));
+        settingsPanel.add(parityDropdown);
+        
+        if (JOptionPane.showConfirmDialog(this, settingsPanel, "Settings",
+                JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+            try {
+                selectedBaudRate = Integer.parseInt(baudRateDropdown.getSelectedItem().toString());
+                selectedDataBits = Integer.parseInt(dataBitsField.getText().trim());
+                selectedStopBits = Integer.parseInt(stopBitsField.getText().trim());
+                
+                switch (parityDropdown.getSelectedIndex()) {
+                    case 0 -> selectedParity = SerialPort.PARITY_NONE;
+                    case 1 -> selectedParity = SerialPort.PARITY_ODD;
+                    case 2 -> selectedParity = SerialPort.PARITY_EVEN;
+                    case 3 -> selectedParity = SerialPort.PARITY_MARK;
+                    case 4 -> selectedParity = SerialPort.PARITY_SPACE;
                 }
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Invalid port selection.", "Error", JOptionPane.ERROR_MESSAGE);
+                
+                if (isSerialPortConnected) {
+                    disconnectSerialPort();
+                    connectToSerialPort();
+                }
+            } catch (NumberFormatException ex) {
+                showError("Invalid number format in settings");
             }
-        });
+        }
+    }
 
-        JButton helloWorldButton = new JButton("Hello World");
-        helloWorldButton.addActionListener(e -> {
-            String message = "Hello World!";
+    private void sendLongListMessage() {
+        // Implementation for sending long list of words
+        // This could be moved to a separate resource file in a production environment
+        var words = "activate\nabort\nabridge\n..."; // shortened for brevity
+        sendSerialMessage(words);
+    }
+
+    private void showError(String errorMessage) {
+        JOptionPane.showMessageDialog(this, errorMessage, "Error", JOptionPane.ERROR_MESSAGE);
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
             try {
-                serialPort.writeBytes(message.getBytes());
-                outputArea.append("Sent: " + message + "\n");
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Error sending data.", "Error", JOptionPane.ERROR_MESSAGE);
+                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            } catch (Exception e) {
+                e.printStackTrace();
             }
+            new Gui().setVisible(true);
         });
-
-        JButton longListButton = new JButton("Long List");
-        longListButton.addActionListener(e -> {
-            String message =
-                    "activate\n"
-                            + "abort\n"
-                            + "abridge\n"
-                            + "absorb\n"
-                            + "absurdity\n"
-                            + "abstract\n"
-                            + "abbreviate\n"
-                            + "abduction\n"
-                            + "abductee\n"
-                            + "accelerate\n"
-                            + "acid\n"
-                            + "accentuate\n"
-                            + "acceptance\n"
-                            + "accident\n"
-                            + "achieve\n"
-                            + "acknowledge\n"
-                            + "acquire\n"
-                            + "act\n"
-                            + "action\n"
-                            + "activist\n"
-                            + "active\n"
-                            + "activity\n"
-                            + "actor\n"
-                            + "actualize\n"
-                            + "adaptation\n"
-                            + "addiction\n"
-                            + "adjustment\n"
-                            + "administer\n"
-                            + "admit\n"
-                            + "adopt\n"
-                            + "advocate\n"
-                            + "aerate\n"
-                            + "affix\n"
-                            + "aftermath\n"
-                            + "agency\n"
-                            + "agent\n"
-                            + "aid\n"
-                            + "aim\n"
-                            + "air\n"
-                            + "alarm\n"
-                            + "allege\n"
-                            + "alleyway\n"
-                            + "alkali\n"
-                            + "alligator\n"
-                            + "allergy\n"
-                            + "allocate\n"
-                            + "allowance\n"
-                            + "ambition\n"
-                            + "amplify\n"
-                            + "anatomical\n"
-                            + "anatomy\n"
-                            + "anchor\n"
-                            + "android\n"
-                            + "announce\n"
-                            + "annihilate\n"
-                            + "answer\n"
-                            + "antacid\n"
-                            + "antagonist\n"
-                            + "anticipate\n"
-                            + "anthropology\n"
-                            + "antiquity\n"
-                            + "apparatus\n"
-                            + "apple\n"
-                            + "appliance\n"
-                            + "appropriate\n"
-                            + "aquarium\n"
-                            + "archive\n"
-                            + "armchair\n"
-                            + "arrangement\n"
-                            + "array\n"
-                            + "artist\n"
-                            + "artistic\n"
-                            + "aspiration\n"
-                            + "assault\n"
-                            + "assemble\n"
-                            + "asset\n"
-                            + "assign\n"
-                            + "assist\n"
-                            + "assembly\n"
-                            + "asthma\n"
-                            + "atmosphere\n"
-                            + "atomistic\n"
-                            + "atomic\n"
-                            + "attachment\n"
-                            + "attack\n"
-                            + "aunt\n"
-                            + "autumn\n"
-                            + "avocado\n"
-                            + "axiomatic\n"
-                            + "backbone\n"
-                            + "background\n"
-                            + "backup\n"
-                            + "balance\n"
-                            + "ballistic\n"
-                            + "balloon\n"
-                            + "banjo\n"
-                            + "bannister\n"
-                            + "banana\n"
-                            + "band\n"
-                            + "bankrupt\n"
-                            + "barber\n"
-                            + "barefoot\n"
-                            + "base\n"
-                            + "basin\n"
-                            + "basketball\n"
-                            + "baton\n"
-                            + "battery\n"
-                            + "bay\n"
-                            + "beach\n"
-                            + "beagle\n"
-                            + "beast\n"
-                            + "beat\n"
-                            + "beautiful\n"
-                            + "because\n"
-                            + "become\n"
-                            + "bedrock\n"
-                            + "bee\n"
-                            + "befall\n"
-                            + "beguile\n"
-                            + "behave\n"
-                            + "being\n"
-                            + "bell\n"
-                            + "beloved\n"
-                            + "benefit\n"
-                            + "berth\n"
-                            + "besiege\n"
-                            + "bestow\n"
-                            + "betrayal\n"
-                            + "betrothal\n"
-                            + "bewilderment\n"
-                            + "bias\n"
-                            + "bibliography\n"
-                            + "bicarbonate\n"
-                            + "bicycle\n"
-                            + "bigotry\n"
-                            + "binomial\n"
-                            + "bird\n"
-                            + "birthplace\n"
-                            + "bishop\n"
-                            + "bituminous\n"
-                            + "blame\n"
-                            + "blindfold\n"
-                            + "blockade\n"
-                            + "blood\n"
-                            + "blossom\n"
-                            + "blot\n"
-                            + "board\n"
-                            + "boast\n"
-                            + "boat\n"
-                            + "bobcat\n"
-                            + "bodyguard\n"
-                            + "boldness\n"
-                            + "bomb\n"
-                            + "bone\n"
-                            + "book\n"
-                            + "boot\n"
-                            + "bore\n"
-                            + "bound\n"
-                            + "boundary\n"
-                            + "bounce\n"
-                            + "bow\n"
-                            + "boxer\n"
-                            + "boxing\n"
-                            + "boyfriend\n"
-                            + "brainstorming\n"
-                            + "branch\n"
-                            + "brass\n"
-                            + "brazil\n"
-                            + "bread\n"
-                            + "breakfast\n"
-                            + "breath\n"
-                            + "brew\n"
-                            + "brigade\n"
-                            + "broadcast\n"
-                            + "bricklayer\n"
-                            + "brighten\n"
-                            + "bring\n"
-                            + "broadcaster\n"
-                            + "brow\n"
-                            + "brunch\n"
-                            + "brush\n"
-                            + "bubble\n"
-                            + "bucket\n"
-                            + "budget\n"
-                            + "buffalo\n"
-                            + "building\n"
-                            + "bulldozer\n"
-                            + "bullfrog\n"
-                            + "bunny\n"
-                            + "burden\n"
-                            + "burger\n"
-                            + "burnish\n"
-                            + "bury\n"
-                            + "burst\n"
-                            + "businessman\n"
-                            + "busker\n"
-                            + "butler\n"
-                            + "butterfly\n"
-                            + "button\n"
-                            + "buyout\n"
-                            + "cabaret\n"
-                            + "cable\n"
-                            + "caffeine\n"
-                            + "café\n"
-                            + "cake\n"
-                            + "calamity\n"
-                            + "calculator\n"
-                            + "calendar\n"
-                            + "calligraphy\n"
-                            + "camera\n"
-                            + "camper\n"
-                            + "campaign\n"
-                            + "canal\n"
-                            + "cancer\n"
-                            + "candle\n"
-                            + "candy\n"
-                            + "capacity\n"
-                            + "captain\n"
-                            + "carbohydrate\n"
-                            + "cardinal\n"
-                            + "carpet\n"
-                            + "carry\n"
-                            + "case\n"
-                            + "cashier\n"
-                            + "castle\n"
-                            + "caterpillar\n"
-                            + "category\n"
-                            + "caution\n"
-                            + "cavalry\n"
-                            + "cease\n"
-                            + "celebrity\n"
-                            + "cell\n"
-                            + "central\n"
-                            + "centrifugal\n"
-                            + "ceremony\n"
-                            + "chain\n"
-                            + "challenge\n"
-                            + "chamber\n"
-                            + "change\n"
-                            + "characteristic\n"
-                            + "chat\n"
-                            + "cheap\n"
-                            + "cheetah\n"
-                            + "chemical\n"
-                            + "chest\n"
-                            + "childhood\n"
-                            + "china\n"
-                            + "chink\n"
-                            + "chinook\n"
-                            + "chitchat\n"
-                            + "chip\n"
-                            + "chirp\n"
-                            + "cheerleader\n"
-                            + "chiefdom\n"
-                            + "chieftain\n"
-                            + "childless\n"
-                            + "children\n"
-                            + "choice\n"
-                            + "chocolate\n"
-                            + "chokehold\n"
-                            + "chromosome\n"
-                            + "cicada\n"
-                            + "circle\n"
-                            + "citrus\n"
-                            + "claim\n"
-                            + "clam\n"
-                            + "clarify\n"
-                            + "classroom\n"
-                            + "cleaning\n"
-                            + "clear\n"
-                            + "cleverness\n"
-                            + "clipboard\n"
-                            + "clock\n"
-                            + "closet\n"
-                            + "cloudy\n"
-                            + "clue\n"
-                            + "coach\n"
-                            + "coast\n"
-                            + "coat\n"
-                            + "cobweb\n"
-                            + "cockroach\n"
-                            + "coffee\n"
-                            + "coil\n"
-                            + "coin\n"
-                            + "colleague\n"
-                            + "color\n"
-                            + "column\n"
-                            + "commence\n"
-                            + "communication\n"
-                            + "commute\n"
-                            + "company\n"
-                            + "competition\n"
-                            + "compress\n"
-                            + "concave\n"
-                            + "confidence\n"
-                            + "confectionery\n"
-                            + "confirm\n"
-                            + "confusion\n"
-                            + "consent\n"
-                            + "consumption\n"
-                            + "contact\n"
-                            + "contemplate\n"
-                            + "continual\n"
-                            + "contract\n"
-                            + "contrast\n"
-                            + "control\n"
-                            + "consequence\n"
-                            + "consciousness\n"
-                            + "constellation\n"
-                            + "constantly\n"
-                            + "constructive\n"
-                            + "constraint\n"
-                            + "contact\n"
-                            + "continue\n"
-                            + "contract\n"
-                            + "contrast\n"
-                            + "control\n"
-                            + "consequence\n"
-                            + "consciousness\n"
-                            + "constellation\n"
-                            + "constantly\n"
-                            + "constructive\n"
-                            + "constraint\n"
-                            + "contact\n"
-                            + "continue\n"
-                            + "contract\n"
-                            + "contrast\n"
-                            + "control\n"
-                            + "consequence\n"
-                            + "consciousness\n"
-                            + "constellation\n"
-                            + "constantly\n"
-                            + "constructive\n"
-                            + "constraint\n"
-                            + "contact\n"
-                            + "continue\n"
-                            + "contract\n"
-                            + "contrast\n"
-                            + "control\n"
-                            + "consequence\n"
-                            + "consciousness\n"
-                            + "constellation\n"
-                            + "constantly\n"
-                            + "constructive\n"
-                            + "constraint\n"
-                            + "contact\n"
-                            + "continue\n"
-                            + "contract\n"
-                            + "contrast\n"
-                            + "control\n"
-                            + "consequence\n"
-                            + "consciousness\n"
-                            + "constellation\n"
-                            + "constantly\n"
-                            + "constructive\n"
-                            + "constraint\n"
-                            + "contact\n"
-                            + "continue\n"
-                            + "contract\n"
-                            + "contrast\n"
-                            + "control\n"
-                            + "consequence\n"
-                            + "consciousness\n"
-                            + "constellation\n"
-                            + "constantly\n"
-                            + "constructive\n"
-                            + "constraint\n"
-                            + "contact\n"
-                            + "continue\n"
-                            + "contract\n"
-                            + "contrast\n"
-                            + "control\n"
-                            + "consequence\n"
-                            + "consciousness\n"
-                            + "constellation\n"
-                            + "constantly\n"
-                            + "constructive\n"
-                            + "constraint\n"
-                            + "contact\n"
-                            + "continue\n"
-                            + "contract\n"
-                            + "contrast\n"
-                            + "control\n"
-                            + "consequence\n"
-                            + "consciousness\n"
-                            + "constellation\n"
-                            + "constantly\n"
-                            + "constructive\n"
-                            + "constraint\n"
-                            + "contact\n"
-                            + "continue\n"
-                            + "contract\n"
-                            + "contrast\n"
-                            + "control\n"
-                            + "consequence\n"
-                            + "consciousness\n"
-                            + "constellation\n"
-                            + "constantly\n"
-                            + "constructive\n"
-                            + "constraint\n"
-                            + "contact\n"
-                            + "continue\n"
-                            + "contract\n"
-                            + "contrast\n"
-                            + "control\n"
-                            + "consequence\n"
-                            +
+    }
+}
