@@ -22,17 +22,19 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class Gui extends JFrame {
-    private final JTextArea serialOutputArea;
-    private final JComboBox<String> availablePortsDropdown;
-    private final JButton connectionToggleButton;
+    private final JTextArea outputArea;
+    private final JComboBox<String> portsDropdown;
+    private final JButton connectButton;
+    private final JTextField messageInput;
     private SerialPort activeSerialPort;
-    private boolean isSerialPortConnected = false;
-    private int selectedBaudRate = 9600;
-    private int selectedDataBits = SerialPort.DATABITS_8;
-    private int selectedStopBits = SerialPort.STOPBITS_1;
-    private int selectedParity = SerialPort.PARITY_NONE;
-    private final ScheduledExecutorService portListUpdater;
-    private final Supplier<String[]> portNamesProvider;
+    private boolean connected = false;
+    private boolean autoNegotiateSpeed = false;
+    private int baudRate = 9600;
+    private int dataBits = SerialPort.DATABITS_8;
+    private int stopBits = SerialPort.STOPBITS_1;
+    private int parity = SerialPort.PARITY_NONE;
+    private final ScheduledExecutorService portUpdater;
+    private final Supplier<String[]> portProvider;
     private final Consumer<String> errorHandler;
     private final Function<String, SerialPort> serialPortFactory;
     private SerialPortEventListener portListener;
@@ -46,12 +48,12 @@ public class Gui extends JFrame {
     }
 
     Gui(boolean startPortUpdater, Supplier<String[]> portNamesProvider, Consumer<String> errorHandler, Function<String, SerialPort> serialPortFactory) {
-        this.portNamesProvider = portNamesProvider;
+        this.portProvider = portNamesProvider;
         this.errorHandler = errorHandler != null
             ? errorHandler
             : msg -> JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE);
         this.serialPortFactory = serialPortFactory != null ? serialPortFactory : SerialPort::new;
-        portListUpdater = Executors.newScheduledThreadPool(1, runnable -> {
+        portUpdater = Executors.newScheduledThreadPool(1, runnable -> {
             Thread t = new Thread(runnable, "port-list-updater");
             t.setDaemon(true);
             return t;
@@ -59,9 +61,10 @@ public class Gui extends JFrame {
         setupFrame();
         
         // Create main components
-        serialOutputArea = new JTextArea(15, 40);
-        availablePortsDropdown = new JComboBox<>();
-        connectionToggleButton = new JButton("Connect");
+        outputArea = new JTextArea(15, 40);
+        portsDropdown = new JComboBox<>();
+        connectButton = new JButton("Connect");
+        messageInput = new JTextField(30);
         
         setupMenuBar();
         setupMainPanel();
@@ -69,7 +72,7 @@ public class Gui extends JFrame {
         
         // Start port list updater
         if (startPortUpdater) {
-            portListUpdater.scheduleAtFixedRate(this::updateAvailablePorts, 0, 2, TimeUnit.SECONDS);
+            portUpdater.scheduleAtFixedRate(this::updateAvailablePorts, 0, 2, TimeUnit.SECONDS);
         }
         
         // Add window closing handler
@@ -77,7 +80,7 @@ public class Gui extends JFrame {
             @Override
             public void windowClosing(WindowEvent e) {
                 disconnectSerialPort();
-                portListUpdater.shutdownNow();
+                portUpdater.shutdownNow();
                 dispose();
             }
         });
@@ -108,6 +111,10 @@ public class Gui extends JFrame {
         var settingsItem = new JMenuItem("Settings");
         settingsItem.addActionListener(e -> showSettingsDialog());
         settingsMenu.add(settingsItem);
+        settingsMenu.addSeparator();
+        var autoNegotiateItem = new JCheckBoxMenuItem("Auto-Negotiate Speed");
+        autoNegotiateItem.addActionListener(e -> autoNegotiateSpeed = autoNegotiateItem.isSelected());
+        settingsMenu.add(autoNegotiateItem);
         
         menuBar.add(fileMenu);
         menuBar.add(settingsMenu);
@@ -118,24 +125,20 @@ public class Gui extends JFrame {
         var mainPanel = new JPanel(new BorderLayout());
         
         // Output area with scroll
-        serialOutputArea.setEditable(false);
-        var scrollPane = new JScrollPane(serialOutputArea);
+        outputArea.setEditable(false);
+        var scrollPane = new JScrollPane(outputArea);
         mainPanel.add(scrollPane, BorderLayout.CENTER);
         
-        // Button panel on the right
-        var buttonPanel = new JPanel(new GridLayout(5, 1, 5, 5));
-        buttonPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        // Input panel on the right
+        var inputPanel = new JPanel(new BorderLayout(5, 5));
+        inputPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        inputPanel.add(new JLabel("Message:"), BorderLayout.NORTH);
+        inputPanel.add(messageInput, BorderLayout.CENTER);
+        var sendButton = new JButton("Send");
+        sendButton.addActionListener(e -> sendSerialMessage(messageInput.getText()));
+        inputPanel.add(sendButton, BorderLayout.SOUTH);
         
-        var sendHelloWorldButton = new JButton("Hello World");
-        sendHelloWorldButton.addActionListener(e -> sendSerialMessage("Hello World!"));
-        
-        var sendLongListButton = new JButton("Long List");
-        sendLongListButton.addActionListener(e -> sendLongListMessage());
-        
-        buttonPanel.add(sendHelloWorldButton);
-        buttonPanel.add(sendLongListButton);
-        
-        mainPanel.add(buttonPanel, BorderLayout.EAST);
+        mainPanel.add(inputPanel, BorderLayout.EAST);
         add(mainPanel);
     }
 
@@ -143,13 +146,13 @@ public class Gui extends JFrame {
         var controlPanel = new JPanel(new FlowLayout());
         
         controlPanel.add(new JLabel("Port:"));
-        controlPanel.add(availablePortsDropdown);
+        controlPanel.add(portsDropdown);
         
-        connectionToggleButton.addActionListener(e -> toggleSerialConnection());
-        controlPanel.add(connectionToggleButton);
+        connectButton.addActionListener(e -> toggleSerialConnection());
+        controlPanel.add(connectButton);
         
         var clearOutputButton = new JButton("Clear");
-        clearOutputButton.addActionListener(e -> serialOutputArea.setText(""));
+        clearOutputButton.addActionListener(e -> outputArea.setText(""));
         controlPanel.add(clearOutputButton);
         
         add(controlPanel, BorderLayout.NORTH);
@@ -160,21 +163,30 @@ public class Gui extends JFrame {
     }
 
     void refreshPortList() {
-        var currentSelection = (String) availablePortsDropdown.getSelectedItem();
-        availablePortsDropdown.removeAllItems();
+        var currentSelection = (String) portsDropdown.getSelectedItem();
+        portsDropdown.removeAllItems();
 
-        String[] detectedPorts = portNamesProvider.get();
-        for (String port : detectedPorts) {
-            availablePortsDropdown.addItem(port);
-        }
-
-        if (currentSelection != null) {
-            availablePortsDropdown.setSelectedItem(currentSelection);
+        String[] detectedPorts = portProvider.get();
+        
+        if (detectedPorts == null || detectedPorts.length == 0) {
+            portsDropdown.addItem("No COM ports found");
+            portsDropdown.setEnabled(false);
+            connectButton.setEnabled(false);
+            showError("Warning: No COM ports found");
+        } else {
+            portsDropdown.setEnabled(true);
+            connectButton.setEnabled(true);
+            for (String port : detectedPorts) {
+                portsDropdown.addItem(port);
+            }
+            if (currentSelection != null && portsDropdown.getModel().getSize() > 0) {
+                portsDropdown.setSelectedItem(currentSelection);
+            }
         }
     }
 
     private void toggleSerialConnection() {
-        if (isSerialPortConnected) {
+        if (connected) {
             disconnectSerialPort();
         } else {
             connectToSerialPort();
@@ -182,7 +194,7 @@ public class Gui extends JFrame {
     }
 
     private void connectToSerialPort() {
-        String selectedPort = (String) availablePortsDropdown.getSelectedItem();
+        String selectedPort = (String) portsDropdown.getSelectedItem();
         if (selectedPort == null) {
             showError("No port selected");
             return;
@@ -192,10 +204,10 @@ public class Gui extends JFrame {
             activeSerialPort = serialPortFactory.apply(selectedPort);
             if (activeSerialPort.openPort()) {
                 activeSerialPort.setParams(
-                    selectedBaudRate,
-                    selectedDataBits,
-                    selectedStopBits,
-                    selectedParity
+                    baudRate,
+                    dataBits,
+                    stopBits,
+                    parity
                 );
                 
                 portListener = (SerialPortEvent event) -> {
@@ -203,7 +215,7 @@ public class Gui extends JFrame {
                         try {
                             String receivedData = activeSerialPort.readString(event.getEventValue());
                             SwingUtilities.invokeLater(() ->
-                                serialOutputArea.append("Received: " + receivedData + "\n")
+                                outputArea.append("Received: " + receivedData + "\n")
                             );
                         } catch (SerialPortException ex) {
                             showError("Error reading from port: " + ex.getMessage());
@@ -213,9 +225,9 @@ public class Gui extends JFrame {
 
                 activeSerialPort.addEventListener(portListener, SerialPort.MASK_RXCHAR);
                 
-                isSerialPortConnected = true;
-                connectionToggleButton.setText("Disconnect");
-                serialOutputArea.append("Connected to " + selectedPort + "\n");
+                connected = true;
+                connectButton.setText("Disconnect");
+                outputArea.append("Connected to " + selectedPort + "\n");
             } else {
                 showError("Failed to open port");
             }
@@ -238,20 +250,20 @@ public class Gui extends JFrame {
                 portListener = null;
             }
         }
-        isSerialPortConnected = false;
-        connectionToggleButton.setText("Connect");
-        serialOutputArea.append("Disconnected\n");
+        connected = false;
+        connectButton.setText("Connect");
+        outputArea.append("Disconnected\n");
     }
 
     private void sendSerialMessage(String message) {
-        if (!isSerialPortConnected || activeSerialPort == null) {
+        if (!connected || activeSerialPort == null) {
             showError("Not connected to any port");
             return;
         }
 
         try {
             activeSerialPort.writeString(message);
-            serialOutputArea.append("Sent: " + message + "\n");
+            outputArea.append("Sent: " + message + "\n");
         } catch (SerialPortException ex) {
             showError("Error sending data: " + ex.getMessage());
         }
@@ -261,7 +273,7 @@ public class Gui extends JFrame {
         var fileChooser = new JFileChooser();
         if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             try {
-                Files.writeString(Path.of(fileChooser.getSelectedFile().getPath()), serialOutputArea.getText());
+                Files.writeString(Path.of(fileChooser.getSelectedFile().getPath()), outputArea.getText());
             } catch (IOException ex) {
                 showError("Error saving file: " + ex.getMessage());
             }
@@ -274,13 +286,13 @@ public class Gui extends JFrame {
         
         var baudRateOptions = List.of("9600", "14400", "19200", "28800", "38400", "57600", "115200");
         var baudRateDropdown = new JComboBox<>(baudRateOptions.toArray(new String[0]));
-        baudRateDropdown.setSelectedItem(String.valueOf(selectedBaudRate));
+        baudRateDropdown.setSelectedItem(String.valueOf(baudRate));
         
         var parityOptions = List.of("None", "Odd", "Even", "Mark", "Space");
         var parityDropdown = new JComboBox<>(parityOptions.toArray(new String[0]));
         
-        var dataBitsField = new JTextField(String.valueOf(selectedDataBits));
-        var stopBitsField = new JTextField(String.valueOf(selectedStopBits));
+        var dataBitsField = new JTextField(String.valueOf(dataBits));
+        var stopBitsField = new JTextField(String.valueOf(stopBits));
         
         settingsPanel.add(new JLabel("Baud Rate:"));
         settingsPanel.add(baudRateDropdown);
@@ -294,19 +306,19 @@ public class Gui extends JFrame {
         if (JOptionPane.showConfirmDialog(this, settingsPanel, "Settings",
                 JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
             try {
-                selectedBaudRate = Integer.parseInt(baudRateDropdown.getSelectedItem().toString());
-                selectedDataBits = Integer.parseInt(dataBitsField.getText().trim());
-                selectedStopBits = Integer.parseInt(stopBitsField.getText().trim());
+                baudRate = Integer.parseInt(baudRateDropdown.getSelectedItem().toString());
+                dataBits = Integer.parseInt(dataBitsField.getText().trim());
+                stopBits = Integer.parseInt(stopBitsField.getText().trim());
                 
                 switch (parityDropdown.getSelectedIndex()) {
-                    case 0 -> selectedParity = SerialPort.PARITY_NONE;
-                    case 1 -> selectedParity = SerialPort.PARITY_ODD;
-                    case 2 -> selectedParity = SerialPort.PARITY_EVEN;
-                    case 3 -> selectedParity = SerialPort.PARITY_MARK;
-                    case 4 -> selectedParity = SerialPort.PARITY_SPACE;
+                    case 0 -> parity = SerialPort.PARITY_NONE;
+                    case 1 -> parity = SerialPort.PARITY_ODD;
+                    case 2 -> parity = SerialPort.PARITY_EVEN;
+                    case 3 -> parity = SerialPort.PARITY_MARK;
+                    case 4 -> parity = SerialPort.PARITY_SPACE;
                 }
                 
-                if (isSerialPortConnected) {
+                if (connected) {
                     disconnectSerialPort();
                     connectToSerialPort();
                 }
@@ -316,12 +328,6 @@ public class Gui extends JFrame {
         }
     }
 
-    private void sendLongListMessage() {
-        // Implementation for sending long list of words
-        // This could be moved to a separate resource file in a production environment
-        var words = "activate\nabort\nabridge\n..."; // shortened for brevity
-        sendSerialMessage(words);
-    }
 
     private void showError(String errorMessage) {
         errorHandler.accept(errorMessage);

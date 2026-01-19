@@ -46,8 +46,8 @@ class GuiTest {
         assertEquals("Serial Communication GUI", runOnEdt(gui::getTitle));
         assertEquals(new Dimension(800, 600), runOnEdt(gui::getSize));
 
-        JButton connectButton = runOnEdt(() -> getField(gui, "connectionToggleButton", JButton.class));
-        JTextArea outputArea = runOnEdt(() -> getField(gui, "serialOutputArea", JTextArea.class));
+        JButton connectButton = runOnEdt(() -> getField(gui, "connectButton", JButton.class));
+        JTextArea outputArea = runOnEdt(() -> getField(gui, "outputArea", JTextArea.class));
 
         assertEquals("Connect", connectButton.getText());
         assertFalse(outputArea.isEditable());
@@ -81,7 +81,7 @@ class GuiTest {
             return null;
         });
 
-        JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "availablePortsDropdown", JComboBox.class));
+        JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "portsDropdown", JComboBox.class));
         assertEquals(2, dropdown.getItemCount());
         assertEquals("COM1", dropdown.getItemAt(0));
         assertEquals("COM2", dropdown.getItemAt(1));
@@ -90,7 +90,7 @@ class GuiTest {
     @Test
     @SuppressWarnings("unchecked")
     void updateAvailablePortsKeepsSelection() throws Exception {
-        JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "availablePortsDropdown", JComboBox.class));
+        JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "portsDropdown", JComboBox.class));
 
         runOnEdt(() -> {
             dropdown.addItem("COM3");
@@ -111,12 +111,32 @@ class GuiTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    void toggleSerialConnectionWithoutSelectionShowsError() throws Exception {
-        JButton connectButton = runOnEdt(() -> getField(gui, "connectionToggleButton", JButton.class));
+    void noComPortsFoundShowsWarning() throws Exception {
+        capturedErrors.clear();
+        testPortNames.set(new String[0]);
 
         runOnEdt(() -> {
-            JComboBox<String> dropdown = getField(gui, "availablePortsDropdown", JComboBox.class);
+            gui.refreshPortList();
+            return null;
+        });
+
+        JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "portsDropdown", JComboBox.class));
+        JButton connectButton = runOnEdt(() -> getField(gui, "connectButton", JButton.class));
+
+        assertEquals("No COM ports found", dropdown.getSelectedItem());
+        assertFalse(dropdown.isEnabled());
+        assertFalse(connectButton.isEnabled());
+        assertEquals(1, capturedErrors.size());
+        assertTrue(capturedErrors.get(0).contains("Warning"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void toggleSerialConnectionWithoutSelectionShowsError() throws Exception {
+        JButton connectButton = runOnEdt(() -> getField(gui, "connectButton", JButton.class));
+
+        runOnEdt(() -> {
+            JComboBox<String> dropdown = getField(gui, "portsDropdown", JComboBox.class);
             dropdown.removeAllItems();
             dropdown.setSelectedItem(null);
             return null;
@@ -127,7 +147,7 @@ class GuiTest {
             return null;
         });
 
-        boolean connected = runOnEdt(() -> getBooleanField(gui, "isSerialPortConnected"));
+        boolean connected = runOnEdt(() -> getBooleanField(gui, "connected"));
 
         assertEquals("Connect", connectButton.getText());
         assertFalse(connected);
@@ -159,7 +179,7 @@ class GuiTest {
     }
 
     private static void shutdownPortUpdater(Gui gui) throws Exception {
-        ScheduledExecutorService executor = getField(gui, "portListUpdater", ScheduledExecutorService.class);
+        ScheduledExecutorService executor = getField(gui, "portUpdater", ScheduledExecutorService.class);
         executor.shutdownNow();
     }
 
