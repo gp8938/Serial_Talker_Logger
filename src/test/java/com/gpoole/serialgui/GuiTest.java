@@ -3,6 +3,10 @@ package com.gpoole.serialgui;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import jssc.SerialPort;
+import jssc.SerialPortEvent;
+import jssc.SerialPortEventListener;
+import jssc.SerialPortException;
 import javax.swing.*;
 import java.awt.*;
 import java.lang.reflect.Field;
@@ -24,9 +28,7 @@ class GuiTest {
     void setUp() throws Exception {
         testPortNames = new AtomicReference<>(new String[]{"COM1", "COM2"});
         capturedErrors = new ArrayList<>();
-        gui = runOnEdt(() -> new Gui(false, testPortNames::get, capturedErrors::add, name -> {
-            throw new IllegalStateException("Serial access not expected in tests");
-        }));
+        gui = runOnEdt(() -> new Gui(false, testPortNames::get, capturedErrors::add, MockSerialPort::new));
         shutdownPortUpdater(gui);
     }
 
@@ -203,5 +205,63 @@ class GuiTest {
         FutureTask<T> future = new FutureTask<>(task);
         SwingUtilities.invokeAndWait(future);
         return future.get();
+    }
+
+    /**
+     * Mock SerialPort for testing without actual hardware
+     */
+    static class MockSerialPort extends SerialPort {
+        private boolean portOpen = false;
+        private SerialPortEventListener eventListener;
+        private int eventMask;
+
+        MockSerialPort(String portName) {
+            super(portName);
+        }
+
+        @Override
+        public boolean openPort() throws SerialPortException {
+            portOpen = true;
+            return true;
+        }
+
+        @Override
+        public boolean closePort() throws SerialPortException {
+            portOpen = false;
+            return true;
+        }
+
+        @Override
+        public boolean setParams(int baudRate, int dataBits, int stopBits, int parity) throws SerialPortException {
+            return true;
+        }
+
+        @Override
+        public boolean writeString(String string) throws SerialPortException {
+            return true;
+        }
+
+        @Override
+        public String readString(int length) throws SerialPortException {
+            return "";
+        }
+
+        @Override
+        public boolean addEventListener(SerialPortEventListener listener, int eventMask) throws SerialPortException {
+            this.eventListener = listener;
+            this.eventMask = eventMask;
+            return true;
+        }
+
+        @Override
+        public boolean removeEventListener() throws SerialPortException {
+            this.eventListener = null;
+            return true;
+        }
+
+        @Override
+        public boolean isOpened() {
+            return portOpen;
+        }
     }
 }
