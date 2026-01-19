@@ -73,8 +73,8 @@ class GuiTest {
             if (type.isInstance(comp)) {
                 return type.cast(comp);
             }
-            if (comp instanceof Container) {
-                T found = findComponentByType((Container) comp, type);
+            if (comp instanceof Container container1) {
+                T found = findComponentByType(container1, type);
                 if (found != null) {
                     return found;
                 }
@@ -85,11 +85,11 @@ class GuiTest {
     
     private JButton findButtonByText(Container container, String text) {
         for (Component comp : container.getComponents()) {
-            if (comp instanceof JButton && text.equals(((JButton) comp).getText())) {
-                return (JButton) comp;
+            if (comp instanceof JButton button && text.equals(button.getText())) {
+                return button;
             }
-            if (comp instanceof Container) {
-                JButton found = findButtonByText((Container) comp, text);
+            if (comp instanceof Container container1) {
+                JButton found = findButtonByText(container1, text);
                 if (found != null) {
                     return found;
                 }
