@@ -72,6 +72,7 @@ class GuiTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void updateAvailablePortsPopulatesDropdown() throws Exception {
         testPortNames.set(new String[] {"COM1", "COM2"});
 
@@ -87,6 +88,7 @@ class GuiTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void updateAvailablePortsKeepsSelection() throws Exception {
         JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "availablePortsDropdown", JComboBox.class));
 
@@ -109,6 +111,7 @@ class GuiTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void toggleSerialConnectionWithoutSelectionShowsError() throws Exception {
         JButton connectButton = runOnEdt(() -> getField(gui, "connectionToggleButton", JButton.class));
 
