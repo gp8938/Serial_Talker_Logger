@@ -29,6 +29,7 @@ public class Gui extends JFrame {
     private SerialPort activeSerialPort;
     private boolean connected = false;
     private boolean autoNegotiateSpeed = false;
+    private boolean noPortsWarningShown = false;
     private int baudRate = 9600;
     private int dataBits = SerialPort.DATABITS_8;
     private int stopBits = SerialPort.STOPBITS_1;
@@ -172,8 +173,12 @@ public class Gui extends JFrame {
             portsDropdown.addItem("No COM ports found");
             portsDropdown.setEnabled(false);
             connectButton.setEnabled(false);
-            showError("Warning: No COM ports found");
+            if (!noPortsWarningShown) {
+                showError("Warning: No COM ports found");
+                noPortsWarningShown = true;
+            }
         } else {
+            noPortsWarningShown = false;
             portsDropdown.setEnabled(true);
             connectButton.setEnabled(true);
             for (String port : detectedPorts) {
