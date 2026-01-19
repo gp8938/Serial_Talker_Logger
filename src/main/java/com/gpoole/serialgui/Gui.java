@@ -13,6 +13,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -27,9 +29,24 @@ public class Gui extends JFrame {
     private int selectedDataBits = SerialPort.DATABITS_8;
     private int selectedStopBits = SerialPort.STOPBITS_1;
     private int selectedParity = SerialPort.PARITY_NONE;
-    private final ScheduledExecutorService portListUpdater = Executors.newScheduledThreadPool(1);
+    private final ScheduledExecutorService portListUpdater;
+    private final Supplier<String[]> portNamesProvider;
+    private final Consumer<String> errorHandler;
 
     public Gui() {
+        this(true, SerialPortList::getPortNames, null);
+    }
+
+    Gui(boolean startPortUpdater) {
+        this(startPortUpdater, SerialPortList::getPortNames, null);
+    }
+
+    Gui(boolean startPortUpdater, Supplier<String[]> portNamesProvider, Consumer<String> errorHandler) {
+        this.portNamesProvider = portNamesProvider;
+        this.errorHandler = errorHandler != null
+            ? errorHandler
+            : msg -> JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE);
+        portListUpdater = Executors.newScheduledThreadPool(1);
         setupFrame();
         
         // Create main components
@@ -42,7 +59,9 @@ public class Gui extends JFrame {
         setupControlPanel();
         
         // Start port list updater
-        portListUpdater.scheduleAtFixedRate(this::updateAvailablePorts, 0, 2, TimeUnit.SECONDS);
+        if (startPortUpdater) {
+            portListUpdater.scheduleAtFixedRate(this::updateAvailablePorts, 0, 2, TimeUnit.SECONDS);
+        }
         
         // Add window closing handler
         addWindowListener(new WindowAdapter() {
@@ -128,19 +147,21 @@ public class Gui extends JFrame {
     }
 
     private void updateAvailablePorts() {
-        SwingUtilities.invokeLater(() -> {
-            var currentSelection = (String) availablePortsDropdown.getSelectedItem();
-            availablePortsDropdown.removeAllItems();
-            
-            String[] detectedPorts = SerialPortList.getPortNames();
-            for (String port : detectedPorts) {
-                availablePortsDropdown.addItem(port);
-            }
-            
-            if (currentSelection != null) {
-                availablePortsDropdown.setSelectedItem(currentSelection);
-            }
-        });
+        SwingUtilities.invokeLater(this::refreshPortList);
+    }
+
+    void refreshPortList() {
+        var currentSelection = (String) availablePortsDropdown.getSelectedItem();
+        availablePortsDropdown.removeAllItems();
+
+        String[] detectedPorts = portNamesProvider.get();
+        for (String port : detectedPorts) {
+            availablePortsDropdown.addItem(port);
+        }
+
+        if (currentSelection != null) {
+            availablePortsDropdown.setSelectedItem(currentSelection);
+        }
     }
 
     private void toggleSerialConnection() {
@@ -288,7 +309,7 @@ public class Gui extends JFrame {
     }
 
     private void showError(String errorMessage) {
-        JOptionPane.showMessageDialog(this, errorMessage, "Error", JOptionPane.ERROR_MESSAGE);
+        errorHandler.accept(errorMessage);
     }
 
     public static void main(String[] args) {
