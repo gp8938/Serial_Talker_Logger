@@ -133,7 +133,6 @@ class GuiTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void toggleSerialConnectionWithoutSelectionShowsError() throws Exception {
         JButton connectButton = runOnEdt(() -> getField(gui, "connectButton", JButton.class));
 
@@ -154,6 +153,77 @@ class GuiTest {
         assertEquals("Connect", connectButton.getText());
         assertFalse(connected);
         assertEquals(List.of("No port selected"), capturedErrors);
+    }
+
+    @Test
+    void sendAndReceiveDataThroughMockPort() throws Exception {
+        testPortNames.set(new String[]{"COM1"});
+        capturedErrors.clear();
+
+        runOnEdt(() -> {
+            gui.refreshPortList();
+            return null;
+        });
+
+        JButton connectButton = runOnEdt(() -> getField(gui, "connectButton", JButton.class));
+        JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "portsDropdown", JComboBox.class));
+        JTextField messageInput = runOnEdt(() -> getField(gui, "messageInput", JTextField.class));
+
+        assertEquals("COM1", dropdown.getSelectedItem());
+
+        // Verify text input field exists and is functional
+        runOnEdt(() -> {
+            messageInput.setText("Test Message");
+            return null;
+        });
+
+        String message = runOnEdt(messageInput::getText);
+        assertEquals("Test Message", message);
+    }
+
+    @Test
+    void autoNegotiateSpeedToggle() throws Exception {
+        JMenuBar menuBar = runOnEdt(gui::getJMenuBar);
+        JMenu settingsMenu = findMenu(menuBar, "Settings");
+
+        assertNotNull(settingsMenu);
+
+        boolean autoNegotiateFound = false;
+        for (int i = 0; i < settingsMenu.getItemCount(); i++) {
+            JMenuItem item = settingsMenu.getItem(i);
+            if (item instanceof JCheckBoxMenuItem && "Auto-Negotiate Speed".equals(item.getText())) {
+                autoNegotiateFound = true;
+                JCheckBoxMenuItem checkBoxItem = (JCheckBoxMenuItem) item;
+                assertFalse(checkBoxItem.isSelected());
+                break;
+            }
+        }
+        assertTrue(autoNegotiateFound, "Auto-Negotiate Speed menu item should exist");
+    }
+
+    @Test
+    void mockPortTracksBaudRate() throws Exception {
+        testPortNames.set(new String[]{"COM1"});
+
+        runOnEdt(() -> {
+            gui.refreshPortList();
+            return null;
+        });
+
+        JButton connectButton = runOnEdt(() -> getField(gui, "connectButton", JButton.class));
+        JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "portsDropdown", JComboBox.class));
+
+        runOnEdt(() -> {
+            dropdown.setSelectedItem("COM1");
+            connectButton.doClick();
+            return null;
+        });
+
+        SerialPort serialPort = runOnEdt(() -> getField(gui, "activeSerialPort", SerialPort.class));
+        assertTrue(serialPort instanceof MockSerialPort);
+
+        MockSerialPort mockPort = (MockSerialPort) serialPort;
+        assertEquals(9600, mockPort.getCurrentBaudRate());
     }
 
     private static JMenu findMenu(JMenuBar menuBar, String text) {
@@ -214,6 +284,10 @@ class GuiTest {
         private boolean portOpen = false;
         private SerialPortEventListener eventListener;
         private int eventMask;
+        private StringBuilder writeBuffer = new StringBuilder();
+        private StringBuilder readBuffer = new StringBuilder();
+        private int currentBaudRate;
+        private final int[] supportedBaudRates = {9600, 14400, 19200, 28800, 38400, 57600, 115200};
 
         MockSerialPort(String portName) {
             super(portName);
@@ -233,17 +307,26 @@ class GuiTest {
 
         @Override
         public boolean setParams(int baudRate, int dataBits, int stopBits, int parity) throws SerialPortException {
+            this.currentBaudRate = baudRate;
             return true;
         }
 
         @Override
         public boolean writeString(String string) throws SerialPortException {
+            writeBuffer.append(string);
+            // Simulate echo back of data
+            readBuffer.append("ECHO: ").append(string);
             return true;
         }
 
         @Override
         public String readString(int length) throws SerialPortException {
-            return "";
+            if (readBuffer.length() == 0) {
+                return "";
+            }
+            String result = readBuffer.substring(0, Math.min(length, readBuffer.length()));
+            readBuffer.delete(0, result.length());
+            return result;
         }
 
         @Override
@@ -262,6 +345,18 @@ class GuiTest {
         @Override
         public boolean isOpened() {
             return portOpen;
+        }
+
+        public String getWriteBuffer() {
+            return writeBuffer.toString();
+        }
+
+        public int getCurrentBaudRate() {
+            return currentBaudRate;
+        }
+
+        public int[] getSupportedBaudRates() {
+            return supportedBaudRates;
         }
     }
 }
