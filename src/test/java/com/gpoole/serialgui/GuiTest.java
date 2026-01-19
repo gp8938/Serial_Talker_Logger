@@ -24,7 +24,9 @@ class GuiTest {
     void setUp() throws Exception {
         testPortNames = new AtomicReference<>(new String[0]);
         capturedErrors = new ArrayList<>();
-        gui = runOnEdt(() -> new Gui(false, testPortNames::get, capturedErrors::add));
+        gui = runOnEdt(() -> new Gui(false, testPortNames::get, capturedErrors::add, name -> {
+            throw new IllegalStateException("Serial access not expected in tests");
+        }));
         shutdownPortUpdater(gui);
     }
 

@@ -2,6 +2,7 @@ package com.gpoole.serialgui;
 
 import jssc.SerialPort;
 import jssc.SerialPortEvent;
+import jssc.SerialPortEventListener;
 import jssc.SerialPortException;
 import jssc.SerialPortList;
 
@@ -15,6 +16,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.function.Function;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -32,21 +34,28 @@ public class Gui extends JFrame {
     private final ScheduledExecutorService portListUpdater;
     private final Supplier<String[]> portNamesProvider;
     private final Consumer<String> errorHandler;
+    private final Function<String, SerialPort> serialPortFactory;
+    private SerialPortEventListener portListener;
 
     public Gui() {
-        this(true, SerialPortList::getPortNames, null);
+        this(true, SerialPortList::getPortNames, null, SerialPort::new);
     }
 
     Gui(boolean startPortUpdater) {
-        this(startPortUpdater, SerialPortList::getPortNames, null);
+        this(startPortUpdater, SerialPortList::getPortNames, null, SerialPort::new);
     }
 
-    Gui(boolean startPortUpdater, Supplier<String[]> portNamesProvider, Consumer<String> errorHandler) {
+    Gui(boolean startPortUpdater, Supplier<String[]> portNamesProvider, Consumer<String> errorHandler, Function<String, SerialPort> serialPortFactory) {
         this.portNamesProvider = portNamesProvider;
         this.errorHandler = errorHandler != null
             ? errorHandler
             : msg -> JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE);
-        portListUpdater = Executors.newScheduledThreadPool(1);
+        this.serialPortFactory = serialPortFactory != null ? serialPortFactory : SerialPort::new;
+        portListUpdater = Executors.newScheduledThreadPool(1, runnable -> {
+            Thread t = new Thread(runnable, "port-list-updater");
+            t.setDaemon(true);
+            return t;
+        });
         setupFrame();
         
         // Create main components
@@ -68,8 +77,8 @@ public class Gui extends JFrame {
             @Override
             public void windowClosing(WindowEvent e) {
                 disconnectSerialPort();
-                portListUpdater.shutdown();
-                System.exit(0);
+                portListUpdater.shutdownNow();
+                dispose();
             }
         });
     }
@@ -180,7 +189,7 @@ public class Gui extends JFrame {
         }
 
         try {
-            activeSerialPort = new SerialPort(selectedPort);
+            activeSerialPort = serialPortFactory.apply(selectedPort);
             if (activeSerialPort.openPort()) {
                 activeSerialPort.setParams(
                     selectedBaudRate,
@@ -189,18 +198,20 @@ public class Gui extends JFrame {
                     selectedParity
                 );
                 
-                activeSerialPort.addEventListener((SerialPortEvent event) -> {
+                portListener = (SerialPortEvent event) -> {
                     if (event.isRXCHAR() && event.getEventValue() > 0) {
                         try {
                             String receivedData = activeSerialPort.readString(event.getEventValue());
-                            SwingUtilities.invokeLater(() -> 
+                            SwingUtilities.invokeLater(() ->
                                 serialOutputArea.append("Received: " + receivedData + "\n")
                             );
                         } catch (SerialPortException ex) {
                             showError("Error reading from port: " + ex.getMessage());
                         }
                     }
-                }, SerialPort.MASK_RXCHAR);
+                };
+
+                activeSerialPort.addEventListener(portListener, SerialPort.MASK_RXCHAR);
                 
                 isSerialPortConnected = true;
                 connectionToggleButton.setText("Disconnect");
@@ -216,11 +227,15 @@ public class Gui extends JFrame {
     private void disconnectSerialPort() {
         if (activeSerialPort != null) {
             try {
+                if (portListener != null) {
+                    activeSerialPort.removeEventListener();
+                }
                 activeSerialPort.closePort();
             } catch (SerialPortException ex) {
                 // Ignore close errors
             } finally {
                 activeSerialPort = null;
+                portListener = null;
             }
         }
         isSerialPortConnected = false;
