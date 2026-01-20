@@ -41,6 +41,10 @@ public class Gui extends JFrame {
     private SerialPortEventListener portListener;
     private final MessageFormatter messageFormatter;
     private final ConfigurationManager config;
+    private boolean scrollLocked = false;
+    private long bytesSent = 0;
+    private long bytesReceived = 0;
+    private long connectionStartTime = 0;
 
     public Gui() {
         this(true, SerialPortList::getPortNames, null, SerialPort::new);
@@ -142,8 +146,36 @@ public class Gui extends JFrame {
         inputPanel.add(new JLabel("Message:"), BorderLayout.NORTH);
         inputPanel.add(messageInput, BorderLayout.CENTER);
         var sendButton = new JButton("Send");
-        sendButton.addActionListener(e -> sendSerialMessage(messageInput.getText()));
+        sendButton.addActionListener(e -> {
+            sendSerialMessage(messageInput.getText());
+            messageInput.setText("");
+        });
         inputPanel.add(sendButton, BorderLayout.SOUTH);
+        
+        // Add keyboard shortcuts
+        messageInput.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyPressed(java.awt.event.KeyEvent e) {
+                if (e.isControlDown() && e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER) {
+                    sendSerialMessage(messageInput.getText());
+                    messageInput.setText("");
+                    e.consume();
+                }
+            }
+        });
+        
+        outputArea.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyPressed(java.awt.event.KeyEvent e) {
+                if (e.isControlDown() && e.getKeyCode() == java.awt.event.KeyEvent.VK_L) {
+                    outputArea.setText("");
+                    e.consume();
+                } else if (e.isControlDown() && e.getKeyCode() == java.awt.event.KeyEvent.VK_S) {
+                    saveOutputToFile();
+                    e.consume();
+                }
+            }
+        });
         
         mainPanel.add(inputPanel, BorderLayout.EAST);
         add(mainPanel);
@@ -162,7 +194,38 @@ public class Gui extends JFrame {
         clearOutputButton.addActionListener(e -> outputArea.setText(""));
         controlPanel.add(clearOutputButton);
         
+        var scrollLockCheckbox = new JCheckBox("Scroll Lock");
+        scrollLockCheckbox.addActionListener(e -> scrollLocked = scrollLockCheckbox.isSelected());
+        controlPanel.add(scrollLockCheckbox);
+        
         add(controlPanel, BorderLayout.NORTH);
+        
+        // Add status bar for metrics
+        var statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        final var statusLabel = new JLabel("Ready");
+        statusBar.add(statusLabel);
+        add(statusBar, BorderLayout.SOUTH);
+        
+        // Update status periodically
+        var statusUpdater = Executors.newScheduledThreadPool(1, runnable -> {
+            Thread t = new Thread(runnable, "status-updater");
+            t.setDaemon(true);
+            return t;
+        });
+        statusUpdater.scheduleAtFixedRate(() -> {
+            final String status;
+            status = String.format("Bytes Sent: %d | Bytes Received: %d", bytesSent, bytesReceived);
+            if (connected && connectionStartTime > 0) {
+                long elapsedSec = (System.currentTimeMillis() - connectionStartTime) / 1000;
+                long hours = elapsedSec / 3600;
+                long minutes = (elapsedSec % 3600) / 60;
+                long seconds = elapsedSec % 60;
+                final String finalStatus = status + String.format(" | Uptime: %02d:%02d:%02d", hours, minutes, seconds);
+                SwingUtilities.invokeLater(() -> statusLabel.setText(finalStatus));
+            } else {
+                SwingUtilities.invokeLater(() -> statusLabel.setText(status));
+            }
+        }, 1, 1, TimeUnit.SECONDS);
     }
 
     private void updateAvailablePorts() {
@@ -238,9 +301,12 @@ public class Gui extends JFrame {
                     if (event.isRXCHAR() && event.getEventValue() > 0) {
                         try {
                             String receivedData = activeSerialPort.readString(event.getEventValue());
-                            SwingUtilities.invokeLater(() ->
-                                outputArea.append(messageFormatter.format(receivedData, true) + "\n")
-                            );
+                            bytesReceived += receivedData.length();
+                            if (!scrollLocked) {
+                                SwingUtilities.invokeLater(() ->
+                                    outputArea.append(messageFormatter.format(receivedData, true) + "\n")
+                                );
+                            }
                         } catch (SerialPortException ex) {
                             showError("Error reading from port: " + ex.getMessage());
                         }
@@ -249,6 +315,9 @@ public class Gui extends JFrame {
 
                 activeSerialPort.addEventListener(portListener, SerialPort.MASK_RXCHAR);
                 
+                bytesSent = 0;
+                bytesReceived = 0;
+                connectionStartTime = System.currentTimeMillis();
                 connected = true;
                 connectButton.setText("Disconnect");
                 outputArea.append(messageFormatter.format("Connected to " + selectedPort, false) + "\n");
@@ -287,6 +356,7 @@ public class Gui extends JFrame {
 
         try {
             activeSerialPort.writeString(message);
+            bytesSent += message.length();
             outputArea.append(messageFormatter.format(message, false) + "\n");
         } catch (SerialPortException ex) {
             showError("Error sending data: " + ex.getMessage());
