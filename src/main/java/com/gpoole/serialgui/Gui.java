@@ -39,6 +39,8 @@ public class Gui extends JFrame {
     private final Consumer<String> errorHandler;
     private final Function<String, SerialPort> serialPortFactory;
     private SerialPortEventListener portListener;
+    private final MessageFormatter messageFormatter;
+    private final ConfigurationManager config;
 
     public Gui() {
         this(true, SerialPortList::getPortNames, null, SerialPort::new);
@@ -49,6 +51,8 @@ public class Gui extends JFrame {
     }
 
     Gui(boolean startPortUpdater, Supplier<String[]> portNamesProvider, Consumer<String> errorHandler, Function<String, SerialPort> serialPortFactory) {
+        this.config = new ConfigurationManager();
+        this.messageFormatter = new MessageFormatter(MessageFormatter.DisplayMode.ASCII);
         this.portProvider = portNamesProvider;
         this.errorHandler = errorHandler != null
             ? errorHandler
@@ -80,6 +84,7 @@ public class Gui extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
+                saveConfiguration();
                 disconnectSerialPort();
                 portUpdater.shutdownNow();
                 dispose();
@@ -92,6 +97,7 @@ public class Gui extends JFrame {
         setSize(800, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
+        restoreConfiguration();
     }
 
     private void setupMenuBar() {
@@ -220,7 +226,7 @@ public class Gui extends JFrame {
                         try {
                             String receivedData = activeSerialPort.readString(event.getEventValue());
                             SwingUtilities.invokeLater(() ->
-                                outputArea.append("Received: " + receivedData + "\n")
+                                outputArea.append(messageFormatter.format(receivedData, true) + "\n")
                             );
                         } catch (SerialPortException ex) {
                             showError("Error reading from port: " + ex.getMessage());
@@ -232,7 +238,7 @@ public class Gui extends JFrame {
                 
                 connected = true;
                 connectButton.setText("Disconnect");
-                outputArea.append("Connected to " + selectedPort + "\n");
+                outputArea.append(messageFormatter.format("Connected to " + selectedPort, false) + "\n");
             } else {
                 showError("Failed to open port");
             }
@@ -257,7 +263,7 @@ public class Gui extends JFrame {
         }
         connected = false;
         connectButton.setText("Connect");
-        outputArea.append("Disconnected\n");
+        outputArea.append(messageFormatter.format("Disconnected", false) + "\n");
     }
 
     private void sendSerialMessage(String message) {
@@ -268,7 +274,7 @@ public class Gui extends JFrame {
 
         try {
             activeSerialPort.writeString(message);
-            outputArea.append("Sent: " + message + "\n");
+            outputArea.append(messageFormatter.format(message, false) + "\n");
         } catch (SerialPortException ex) {
             showError("Error sending data: " + ex.getMessage());
         }
@@ -336,6 +342,43 @@ public class Gui extends JFrame {
 
     private void showError(String errorMessage) {
         errorHandler.accept(errorMessage);
+    }
+
+    private void saveConfiguration() {
+        config.setInt(ConfigurationManager.KEY_BAUD_RATE, baudRate);
+        config.setInt(ConfigurationManager.KEY_DATA_BITS, dataBits);
+        config.setInt(ConfigurationManager.KEY_STOP_BITS, stopBits);
+        config.setInt(ConfigurationManager.KEY_PARITY, parity);
+        config.setBoolean(ConfigurationManager.KEY_AUTO_NEGOTIATE, autoNegotiateSpeed);
+        config.setInt(ConfigurationManager.KEY_WINDOW_WIDTH, getWidth());
+        config.setInt(ConfigurationManager.KEY_WINDOW_HEIGHT, getHeight());
+        config.setInt(ConfigurationManager.KEY_WINDOW_X, getX());
+        config.setInt(ConfigurationManager.KEY_WINDOW_Y, getY());
+        Object selectedPort = portsDropdown.getSelectedItem();
+        if (selectedPort != null && !selectedPort.toString().equals("No COM ports found")) {
+            config.setString(ConfigurationManager.KEY_LAST_PORT, selectedPort.toString());
+        }
+        config.saveConfiguration();
+    }
+
+    private void restoreConfiguration() {
+        baudRate = config.getInt(ConfigurationManager.KEY_BAUD_RATE, 9600);
+        dataBits = config.getInt(ConfigurationManager.KEY_DATA_BITS, SerialPort.DATABITS_8);
+        stopBits = config.getInt(ConfigurationManager.KEY_STOP_BITS, SerialPort.STOPBITS_1);
+        parity = config.getInt(ConfigurationManager.KEY_PARITY, SerialPort.PARITY_NONE);
+        autoNegotiateSpeed = config.getBoolean(ConfigurationManager.KEY_AUTO_NEGOTIATE, false);
+        
+        int width = config.getInt(ConfigurationManager.KEY_WINDOW_WIDTH, 800);
+        int height = config.getInt(ConfigurationManager.KEY_WINDOW_HEIGHT, 600);
+        int x = config.getInt(ConfigurationManager.KEY_WINDOW_X, -1);
+        int y = config.getInt(ConfigurationManager.KEY_WINDOW_Y, -1);
+        
+        setSize(width, height);
+        if (x >= 0 && y >= 0) {
+            setLocation(x, y);
+        } else {
+            setLocationRelativeTo(null);
+        }
     }
 
     public static void main(String[] args) {

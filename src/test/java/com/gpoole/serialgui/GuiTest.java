@@ -330,10 +330,9 @@ class GuiTest {
         }
 
         @Override
-        public boolean addEventListener(SerialPortEventListener listener, int eventMask) throws SerialPortException {
+        public void addEventListener(SerialPortEventListener listener, int eventMask) throws SerialPortException {
             this.eventListener = listener;
             this.eventMask = eventMask;
-            return true;
         }
 
         @Override
