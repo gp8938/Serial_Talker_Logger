@@ -46,6 +46,7 @@ public class Gui extends JFrame {
     private final StatusLED statusLED;
     private boolean scrollLocked = false;
     private JLabel statusLabel;
+    private final CommandHistory commandHistory;
 
     public Gui() {
         this(true, SerialPortList::getPortNames, null, SerialPort::new);
@@ -73,6 +74,7 @@ public class Gui extends JFrame {
         this.commManager.onDisconnected(this::onDisconnected);
         
         this.statusLED = new StatusLED();
+        this.commandHistory = new CommandHistory();
         
         portUpdater = Executors.newScheduledThreadPool(1, runnable -> {
             Thread t = new Thread(runnable, "port-list-updater");
@@ -165,7 +167,11 @@ public class Gui extends JFrame {
         inputPanel.add(messageInput, BorderLayout.CENTER);
         var sendButton = new JButton("Send");
         sendButton.addActionListener(e -> {
-            sendSerialMessage(messageInput.getText());
+            String message = messageInput.getText();
+            sendSerialMessage(message);
+            if (!message.trim().isEmpty()) {
+                commandHistory.add(message);
+            }
             messageInput.setText("");
         });
         inputPanel.add(sendButton, BorderLayout.SOUTH);
@@ -175,8 +181,23 @@ public class Gui extends JFrame {
             @Override
             public void keyPressed(java.awt.event.KeyEvent e) {
                 if (e.isControlDown() && e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER) {
-                    sendSerialMessage(messageInput.getText());
+                    String message = messageInput.getText();
+                    sendSerialMessage(message);
+                    if (!message.trim().isEmpty()) {
+                        commandHistory.add(message);
+                    }
                     messageInput.setText("");
+                    commandHistory.reset();
+                    e.consume();
+                } else if (e.getKeyCode() == java.awt.event.KeyEvent.VK_UP) {
+                    String previous = commandHistory.getPrevious();
+                    messageInput.setText(previous);
+                    messageInput.setCaretPosition(previous.length());
+                    e.consume();
+                } else if (e.getKeyCode() == java.awt.event.KeyEvent.VK_DOWN) {
+                    String next = commandHistory.getNext();
+                    messageInput.setText(next);
+                    messageInput.setCaretPosition(next.length());
                     e.consume();
                 }
             }
