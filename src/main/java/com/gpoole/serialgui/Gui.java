@@ -26,8 +26,6 @@ public class Gui extends JFrame {
     private final JComboBox<String> portsDropdown;
     private final JButton connectButton;
     private final JTextField messageInput;
-    private SerialPort activeSerialPort;
-    private boolean connected = false;
     private boolean autoNegotiateSpeed = false;
     private boolean noPortsWarningShown = false;
     private int baudRate = 9600;
@@ -38,13 +36,12 @@ public class Gui extends JFrame {
     private final Supplier<String[]> portProvider;
     private final Consumer<String> errorHandler;
     private final Function<String, SerialPort> serialPortFactory;
-    private SerialPortEventListener portListener;
     private final MessageFormatter messageFormatter;
     private final ConfigurationManager config;
+    private final SerialCommunicationManager commManager;
+    private final StatusLED statusLED;
     private boolean scrollLocked = false;
-    private long bytesSent = 0;
-    private long bytesReceived = 0;
-    private long connectionStartTime = 0;
+    private JLabel statusLabel;
 
     public Gui() {
         this(true, SerialPortList::getPortNames, null, SerialPort::new);
@@ -62,6 +59,17 @@ public class Gui extends JFrame {
             ? errorHandler
             : msg -> JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE);
         this.serialPortFactory = serialPortFactory != null ? serialPortFactory : SerialPort::new;
+        
+        // Initialize SerialCommunicationManager with callbacks
+        this.commManager = new SerialCommunicationManager(serialPortFactory, 
+            dataBits, stopBits, parity);
+        this.commManager.onDataReceived(this::onDataReceived);
+        this.commManager.onError(this::onError);
+        this.commManager.onConnected(this::onConnected);
+        this.commManager.onDisconnected(this::onDisconnected);
+        
+        this.statusLED = new StatusLED();
+        
         portUpdater = Executors.newScheduledThreadPool(1, runnable -> {
             Thread t = new Thread(runnable, "port-list-updater");
             t.setDaemon(true);
@@ -89,7 +97,7 @@ public class Gui extends JFrame {
             @Override
             public void windowClosing(WindowEvent e) {
                 saveConfiguration();
-                disconnectSerialPort();
+                commManager.disconnect();
                 portUpdater.shutdownNow();
                 dispose();
             }
@@ -184,6 +192,9 @@ public class Gui extends JFrame {
     private void setupControlPanel() {
         var controlPanel = new JPanel(new FlowLayout());
         
+        // Add status LED indicator
+        controlPanel.add(statusLED);
+        
         controlPanel.add(new JLabel("Port:"));
         controlPanel.add(portsDropdown);
         
@@ -202,7 +213,7 @@ public class Gui extends JFrame {
         
         // Add status bar for metrics
         var statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        final var statusLabel = new JLabel("Ready");
+        statusLabel = new JLabel("Ready");
         statusBar.add(statusLabel);
         add(statusBar, BorderLayout.SOUTH);
         
@@ -214,9 +225,10 @@ public class Gui extends JFrame {
         });
         statusUpdater.scheduleAtFixedRate(() -> {
             final String status;
-            status = String.format("Bytes Sent: %d | Bytes Received: %d", bytesSent, bytesReceived);
-            if (connected && connectionStartTime > 0) {
-                long elapsedSec = (System.currentTimeMillis() - connectionStartTime) / 1000;
+            status = String.format("Bytes Sent: %d | Bytes Received: %d", 
+                commManager.getBytesSent(), commManager.getBytesReceived());
+            if (commManager.isConnected()) {
+                long elapsedSec = commManager.getUptimeSeconds();
                 long hours = elapsedSec / 3600;
                 long minutes = (elapsedSec % 3600) / 60;
                 long seconds = elapsedSec % 60;
@@ -260,8 +272,8 @@ public class Gui extends JFrame {
     }
 
     private void toggleSerialConnection() {
-        if (connected) {
-            disconnectSerialPort();
+        if (commManager.isConnected()) {
+            commManager.disconnect();
         } else {
             connectToSerialPort();
         }
@@ -269,96 +281,69 @@ public class Gui extends JFrame {
 
     private void connectToSerialPort() {
         String selectedPort = (String) portsDropdown.getSelectedItem();
-        if (selectedPort == null) {
+        if (selectedPort == null || "No COM ports found".equals(selectedPort)) {
             showError("No port selected");
             return;
         }
 
         try {
-            activeSerialPort = serialPortFactory.apply(selectedPort);
-            if (activeSerialPort.openPort()) {
-                if (autoNegotiateSpeed) {
-                    int negotiatedBaudRate = BaudRateNegotiator.negotiate(
-                        activeSerialPort, dataBits, stopBits, parity
-                    );
-                    if (negotiatedBaudRate > 0) {
-                        baudRate = negotiatedBaudRate;
-                        outputArea.append(messageFormatter.format("Auto-negotiated baud rate: " + baudRate, false) + "\n");
-                    } else {
-                        showError("Failed to negotiate baud rate. Using default: " + baudRate);
-                        activeSerialPort.setParams(baudRate, dataBits, stopBits, parity);
-                    }
+            int actualBaudRate = baudRate;
+            if (autoNegotiateSpeed) {
+                actualBaudRate = BaudRateNegotiator.negotiate(
+                    serialPortFactory.apply(selectedPort), dataBits, stopBits, parity
+                );
+                if (actualBaudRate > 0) {
+                    outputArea.append(messageFormatter.format("Auto-negotiated baud rate: " + actualBaudRate, false) + "\n");
                 } else {
-                    activeSerialPort.setParams(
-                        baudRate,
-                        dataBits,
-                        stopBits,
-                        parity
-                    );
+                    showError("Failed to negotiate baud rate. Using default: " + baudRate);
+                    actualBaudRate = baudRate;
                 }
-                
-                portListener = (SerialPortEvent event) -> {
-                    if (event.isRXCHAR() && event.getEventValue() > 0) {
-                        try {
-                            String receivedData = activeSerialPort.readString(event.getEventValue());
-                            bytesReceived += receivedData.length();
-                            if (!scrollLocked) {
-                                SwingUtilities.invokeLater(() ->
-                                    outputArea.append(messageFormatter.format(receivedData, true) + "\n")
-                                );
-                            }
-                        } catch (SerialPortException ex) {
-                            showError("Error reading from port: " + ex.getMessage());
-                        }
-                    }
-                };
-
-                activeSerialPort.addEventListener(portListener, SerialPort.MASK_RXCHAR);
-                
-                bytesSent = 0;
-                bytesReceived = 0;
-                connectionStartTime = System.currentTimeMillis();
-                connected = true;
-                connectButton.setText("Disconnect");
-                outputArea.append(messageFormatter.format("Connected to " + selectedPort, false) + "\n");
-            } else {
-                showError("Failed to open port");
             }
-        } catch (SerialPortException ex) {
+            
+            commManager.connect(selectedPort, actualBaudRate, dataBits, stopBits, parity);
+        } catch (Exception ex) {
             showError("Error opening port: " + ex.getMessage());
         }
     }
 
-    private void disconnectSerialPort() {
-        if (activeSerialPort != null) {
-            try {
-                if (portListener != null) {
-                    activeSerialPort.removeEventListener();
-                }
-                activeSerialPort.closePort();
-            } catch (SerialPortException ex) {
-                // Ignore close errors
-            } finally {
-                activeSerialPort = null;
-                portListener = null;
-            }
+    private void onDataReceived(String data) {
+        if (!scrollLocked) {
+            SwingUtilities.invokeLater(() ->
+                outputArea.append(messageFormatter.format(data, true) + "\n")
+            );
         }
-        connected = false;
-        connectButton.setText("Connect");
-        outputArea.append(messageFormatter.format("Disconnected", false) + "\n");
+    }
+
+    private void onConnected(String portName) {
+        SwingUtilities.invokeLater(() -> {
+            connectButton.setText("Disconnect");
+            statusLED.setConnected(true);
+            outputArea.append(messageFormatter.format("Connected to " + portName, false) + "\n");
+        });
+    }
+
+    private void onDisconnected(String reason) {
+        SwingUtilities.invokeLater(() -> {
+            connectButton.setText("Connect");
+            statusLED.setConnected(false);
+            outputArea.append(messageFormatter.format("Disconnected: " + reason, false) + "\n");
+        });
+    }
+
+    private void onError(String errorMessage) {
+        SwingUtilities.invokeLater(() -> showError(errorMessage));
     }
 
     private void sendSerialMessage(String message) {
-        if (!connected || activeSerialPort == null) {
+        if (!commManager.isConnected()) {
             showError("Not connected to any port");
             return;
         }
 
         try {
-            activeSerialPort.writeString(message);
-            bytesSent += message.length();
+            commManager.sendMessage(message);
             outputArea.append(messageFormatter.format(message, false) + "\n");
-        } catch (SerialPortException ex) {
+        } catch (Exception ex) {
             showError("Error sending data: " + ex.getMessage());
         }
     }
@@ -428,8 +413,8 @@ public class Gui extends JFrame {
                 config.setString(ConfigurationManager.KEY_DISPLAY_MODE, newMode.name());
                 messageFormatter.setDisplayMode(newMode);
                 
-                if (connected) {
-                    disconnectSerialPort();
+                if (commManager.isConnected()) {
+                    commManager.disconnect();
                     connectToSerialPort();
                 }
             } catch (NumberFormatException ex) {
