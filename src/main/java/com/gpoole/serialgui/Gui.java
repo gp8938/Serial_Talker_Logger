@@ -23,6 +23,21 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Main GUI window for serial communication application.
+ * 
+ * Provides a complete serial communication interface with:
+ * - Port selection and connection management
+ * - Real-time data display with timestamps and formatting options
+ * - Text input with command history navigation
+ * - Search/filter functionality
+ * - CSV/JSON export capabilities
+ * - Configuration persistence
+ * - Performance metrics and connection status indicator
+ * 
+ * All serial communication is managed through the SerialCommunicationManager
+ * to separate business logic from GUI concerns.
+ */
 public class Gui extends JFrame {
     private static final Logger logger = LoggerFactory.getLogger(Gui.class);
     

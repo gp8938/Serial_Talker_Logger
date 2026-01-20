@@ -5,7 +5,12 @@ import java.awt.*;
 
 /**
  * A visual LED indicator component showing connection status.
- * Displays as a colored circle - green when connected, red when disconnected.
+ * 
+ * Displays as a colored circle with 3D effect:
+ * - Green (RGB: 0,255,0) when connected
+ * - Red (RGB: 255,0,0) when disconnected
+ * 
+ * 20x20 pixel size with white highlight to create depth effect.
  */
 public class StatusLED extends JPanel {
     private boolean connected = false;
@@ -14,7 +19,7 @@ public class StatusLED extends JPanel {
     private static final Color DISCONNECTED_COLOR = new Color(255, 0, 0);
 
     /**
-     * Creates a new StatusLED component.
+     * Creates a new StatusLED component with initial disconnected state.
      */
     public StatusLED() {
         setPreferredSize(new Dimension(SIZE + 10, SIZE + 10));

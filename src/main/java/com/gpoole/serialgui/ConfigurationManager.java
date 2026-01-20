@@ -7,7 +7,16 @@ import java.util.Properties;
 
 /**
  * Manages persistent configuration for the Serial Talker Logger application.
+ * 
  * Stores and retrieves user settings to ~/.serialtalker/config.properties
+ * Settings are automatically saved when changes are made.
+ * 
+ * Managed settings include:
+ * - Serial port parameters (baud rate, data bits, stop bits, parity)
+ * - Window dimensions and position
+ * - Auto-negotiate speed preference
+ * - Display mode (ASCII, HEX, HEX_AND_ASCII)
+ * - Last used port
  */
 public class ConfigurationManager {
     private static final Path CONFIG_DIR = Path.of(System.getProperty("user.home"), ".serialtalker");
@@ -15,6 +24,9 @@ public class ConfigurationManager {
 
     private final Properties properties;
 
+    /**
+     * Creates a new ConfigurationManager and loads existing settings.
+     */
     public ConfigurationManager() {
         this.properties = new Properties();
         loadConfiguration();

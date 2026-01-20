@@ -5,17 +5,35 @@ import java.time.format.DateTimeFormatter;
 
 /**
  * Handles formatting of serial messages with timestamps and display mode conversion.
+ * 
+ * Features:
+ * - Adds [HH:mm:ss.SSS] timestamp to each message
+ * - Supports three display modes: ASCII (plain text), HEX (hex codes), HEX_AND_ASCII (both)
+ * - Prefixes with TX (transmitted) or RX (received) indicator
+ * 
+ * Example output: "[12:34:56.789] RX: Hello World"
  */
 public class MessageFormatter {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
     private DisplayMode displayMode;
 
+    /**
+     * Enumeration of supported message display modes.
+     */
     public enum DisplayMode {
+        /** Display as plain ASCII text */
         ASCII,
+        /** Display as hexadecimal values */
         HEX,
+        /** Display both ASCII and hexadecimal representations */
         HEX_AND_ASCII
     }
 
+    /**
+     * Creates a new MessageFormatter with the specified display mode.
+     *
+     * @param displayMode The initial display mode
+     */
     public MessageFormatter(DisplayMode displayMode) {
         this.displayMode = displayMode;
     }

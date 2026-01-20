@@ -5,9 +5,16 @@ import jssc.SerialPortException;
 
 /**
  * Handles automatic baud rate negotiation for serial ports.
- * Attempts to communicate at different baud rates to find the correct one.
+ * 
+ * Attempts to communicate at different baud rates to find the correct one
+ * by sending an AT command and checking for a response. This is commonly used
+ * with modem devices that support Hayes AT commands.
+ * 
+ * Tested baud rates (in order): 9600, 115200, 19200, 38400, 57600,
+ * 14400, 28800, 4800, 2400, 1200
  */
 public class BaudRateNegotiator {
+    /** Common baud rates to try, in order of frequency */
     private static final int[] COMMON_BAUD_RATES = {
         9600, 115200, 19200, 38400, 57600,
         14400, 28800, 4800, 2400, 1200
@@ -18,6 +25,7 @@ public class BaudRateNegotiator {
 
     /**
      * Attempts to negotiate the correct baud rate for a serial port.
+
      * Tries each common baud rate and sends a test command.
      *
      * @param port The serial port to negotiate

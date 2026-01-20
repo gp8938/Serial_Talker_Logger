@@ -5,13 +5,28 @@ import java.util.List;
 
 /**
  * Manages command history for the serial communication input field.
- * Allows navigating through previously entered commands using up/down keys.
+ * 
+ * Features:
+ * - Allows navigating through previously entered commands using up/down keys
+ * - Maintains up to 50 most recent commands
+ * - Automatically prevents duplicate consecutive commands
+ * - Resets position after adding new command
+ * 
+ * Usage:
+ * - Call add() when a command is sent
+ * - Call getPrevious() when up arrow is pressed
+ * - Call getNext() when down arrow is pressed
+ * - Call reset() after sending to return to empty state
  */
 public class CommandHistory {
     private final List<String> history;
     private int currentIndex;
+    /** Maximum number of commands to retain in history */
     private static final int MAX_HISTORY = 50;
 
+    /**
+     * Creates a new CommandHistory with empty command list.
+     */
     public CommandHistory() {
         this.history = new ArrayList<>();
         this.currentIndex = -1;
