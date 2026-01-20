@@ -214,12 +214,25 @@ public class Gui extends JFrame {
         try {
             activeSerialPort = serialPortFactory.apply(selectedPort);
             if (activeSerialPort.openPort()) {
-                activeSerialPort.setParams(
-                    baudRate,
-                    dataBits,
-                    stopBits,
-                    parity
-                );
+                if (autoNegotiateSpeed) {
+                    int negotiatedBaudRate = BaudRateNegotiator.negotiate(
+                        activeSerialPort, dataBits, stopBits, parity
+                    );
+                    if (negotiatedBaudRate > 0) {
+                        baudRate = negotiatedBaudRate;
+                        outputArea.append(messageFormatter.format("Auto-negotiated baud rate: " + baudRate, false) + "\n");
+                    } else {
+                        showError("Failed to negotiate baud rate. Using default: " + baudRate);
+                        activeSerialPort.setParams(baudRate, dataBits, stopBits, parity);
+                    }
+                } else {
+                    activeSerialPort.setParams(
+                        baudRate,
+                        dataBits,
+                        stopBits,
+                        parity
+                    );
+                }
                 
                 portListener = (SerialPortEvent event) -> {
                     if (event.isRXCHAR() && event.getEventValue() > 0) {
@@ -302,6 +315,10 @@ public class Gui extends JFrame {
         var parityOptions = List.of("None", "Odd", "Even", "Mark", "Space");
         var parityDropdown = new JComboBox<>(parityOptions.toArray(new String[0]));
         
+        var displayModeOptions = List.of("ASCII", "HEX", "HEX and ASCII");
+        var displayModeDropdown = new JComboBox<>(displayModeOptions.toArray(new String[0]));
+        displayModeDropdown.setSelectedIndex(0);
+        
         var dataBitsField = new JTextField(String.valueOf(dataBits));
         var stopBitsField = new JTextField(String.valueOf(stopBits));
         
@@ -313,6 +330,8 @@ public class Gui extends JFrame {
         settingsPanel.add(stopBitsField);
         settingsPanel.add(new JLabel("Parity:"));
         settingsPanel.add(parityDropdown);
+        settingsPanel.add(new JLabel("Display Mode:"));
+        settingsPanel.add(displayModeDropdown);
         
         if (JOptionPane.showConfirmDialog(this, settingsPanel, "Settings",
                 JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
@@ -328,6 +347,16 @@ public class Gui extends JFrame {
                     case 3 -> parity = SerialPort.PARITY_MARK;
                     case 4 -> parity = SerialPort.PARITY_SPACE;
                 }
+                
+                MessageFormatter.DisplayMode newMode = switch (displayModeDropdown.getSelectedIndex()) {
+                    case 0 -> MessageFormatter.DisplayMode.ASCII;
+                    case 1 -> MessageFormatter.DisplayMode.HEX;
+                    case 2 -> MessageFormatter.DisplayMode.HEX_AND_ASCII;
+                    default -> MessageFormatter.DisplayMode.ASCII;
+                };
+                
+                config.setString(ConfigurationManager.KEY_DISPLAY_MODE, newMode.name());
+                messageFormatter.setDisplayMode(newMode);
                 
                 if (connected) {
                     disconnectSerialPort();

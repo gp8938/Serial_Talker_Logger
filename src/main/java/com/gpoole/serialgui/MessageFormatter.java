@@ -8,7 +8,7 @@ import java.time.format.DateTimeFormatter;
  */
 public class MessageFormatter {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
-    private final DisplayMode displayMode;
+    private DisplayMode displayMode;
 
     public enum DisplayMode {
         ASCII,
@@ -71,6 +71,6 @@ public class MessageFormatter {
      * @param mode The new display mode
      */
     public void setDisplayMode(DisplayMode mode) {
-        // Note: Current implementation is immutable. For mutable version, would need to track state.
+        this.displayMode = mode;
     }
 }
