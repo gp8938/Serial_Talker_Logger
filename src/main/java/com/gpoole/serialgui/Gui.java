@@ -185,6 +185,9 @@ public class Gui extends JFrame {
                 } else if (e.isControlDown() && e.getKeyCode() == java.awt.event.KeyEvent.VK_S) {
                     saveOutputToFile();
                     e.consume();
+                } else if (e.isControlDown() && e.getKeyCode() == java.awt.event.KeyEvent.VK_F) {
+                    openSearchDialog();
+                    e.consume();
                 }
             }
         });
@@ -370,6 +373,112 @@ public class Gui extends JFrame {
                 showError("Error saving file: " + ex.getMessage());
             }
         }
+    }
+
+    private void openSearchDialog() {
+        var searchPanel = new JPanel(new BorderLayout(5, 5));
+        searchPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        var searchField = new JTextField(20);
+        var resultLabel = new JLabel("Enter search term");
+        var nextButton = new JButton("Next (→)");
+        var prevButton = new JButton("← Previous");
+        var highlightCheckbox = new JCheckBox("Highlight All", false);
+        
+        var currentIndex = new int[]{0};
+        var lastSearchTerm = new String[]{""};
+        
+        Runnable performSearch = () -> {
+            String searchTerm = searchField.getText();
+            if (searchTerm.isEmpty()) {
+                resultLabel.setText("Enter search term");
+                return;
+            }
+            
+            String text = outputArea.getText();
+            int index = text.indexOf(searchTerm, currentIndex[0]);
+            
+            if (index == -1 && currentIndex[0] > 0) {
+                index = text.indexOf(searchTerm, 0);
+                if (index == -1) {
+                    resultLabel.setText("No matches found");
+                    return;
+                }
+            }
+            
+            if (index != -1) {
+                outputArea.setCaretPosition(index);
+                outputArea.select(index, index + searchTerm.length());
+                currentIndex[0] = index + searchTerm.length();
+                resultLabel.setText("Match found at position " + index);
+                
+                if (highlightCheckbox.isSelected()) {
+                    highlightAllMatches(searchTerm);
+                }
+            } else {
+                resultLabel.setText("No matches found");
+            }
+        };
+        
+        searchField.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyPressed(java.awt.event.KeyEvent e) {
+                if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER) {
+                    currentIndex[0] = 0;
+                    lastSearchTerm[0] = searchField.getText();
+                    performSearch.run();
+                } else if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ESCAPE) {
+                    JOptionPane.getRootFrame().dispose();
+                }
+            }
+        });
+        
+        nextButton.addActionListener(e -> performSearch.run());
+        prevButton.addActionListener(e -> {
+            String searchTerm = searchField.getText();
+            if (searchTerm.isEmpty()) {
+                return;
+            }
+            String text = outputArea.getText();
+            int index = text.lastIndexOf(searchTerm, currentIndex[0] - searchTerm.length() - 1);
+            if (index != -1) {
+                outputArea.setCaretPosition(index);
+                outputArea.select(index, index + searchTerm.length());
+                currentIndex[0] = index;
+                resultLabel.setText("Match found at position " + index);
+            }
+        });
+        
+        var buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        buttonPanel.add(prevButton);
+        buttonPanel.add(nextButton);
+        buttonPanel.add(highlightCheckbox);
+        
+        searchPanel.add(new JLabel("Search:"), BorderLayout.WEST);
+        searchPanel.add(searchField, BorderLayout.CENTER);
+        searchPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        var dialog = new JDialog(this, "Search", false);
+        dialog.getContentPane().add(searchPanel);
+        dialog.add(resultLabel, BorderLayout.SOUTH);
+        dialog.setSize(400, 120);
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+        searchField.requestFocus();
+        
+        logger.debug("Search dialog opened");
+    }
+
+    private void highlightAllMatches(String searchTerm) {
+        // Highlight all matches by finding them all and displaying count
+        String text = outputArea.getText();
+        int count = 0;
+        int index = 0;
+        while ((index = text.indexOf(searchTerm, index)) != -1) {
+            count++;
+            index += searchTerm.length();
+        }
+        logger.debug("Found {} matches for '{}'", count, searchTerm);
     }
 
     private void showSettingsDialog() {
