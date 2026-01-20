@@ -64,7 +64,9 @@ class GuiTest {
         assertNotNull(fileMenu, "File menu should exist");
         assertNotNull(settingsMenu, "Settings menu should exist");
 
-        JMenuItem saveItem = findMenuItem(fileMenu, "Save");
+        JMenuItem saveItem = findMenuItem(fileMenu, "Save as Text");
+        JMenuItem csvItem = findMenuItem(fileMenu, "Export as CSV");
+        JMenuItem jsonItem = findMenuItem(fileMenu, "Export as JSON");
         JMenuItem exitItem = findMenuItem(fileMenu, "Exit");
         JMenuItem settingsItem = findMenuItem(settingsMenu, "Settings");
 

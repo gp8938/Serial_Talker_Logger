@@ -121,11 +121,17 @@ public class Gui extends JFrame {
         
         // File Menu
         var fileMenu = new JMenu("File");
-        var saveMenuItem = new JMenuItem("Save");
+        var saveMenuItem = new JMenuItem("Save as Text");
         saveMenuItem.addActionListener(e -> saveOutputToFile());
+        var csvMenuItem = new JMenuItem("Export as CSV");
+        csvMenuItem.addActionListener(e -> exportAsCSV());
+        var jsonMenuItem = new JMenuItem("Export as JSON");
+        jsonMenuItem.addActionListener(e -> exportAsJSON());
         var exitMenuItem = new JMenuItem("Exit");
         exitMenuItem.addActionListener(e -> System.exit(0));
         fileMenu.add(saveMenuItem);
+        fileMenu.add(csvMenuItem);
+        fileMenu.add(jsonMenuItem);
         fileMenu.addSeparator();
         fileMenu.add(exitMenuItem);
         
@@ -479,6 +485,95 @@ public class Gui extends JFrame {
             index += searchTerm.length();
         }
         logger.debug("Found {} matches for '{}'", count, searchTerm);
+    }
+
+    private void exportAsCSV() {
+        var fileChooser = new JFileChooser();
+        fileChooser.setSelectedFile(new java.io.File("output.csv"));
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            try {
+                String text = outputArea.getText();
+                String[] lines = text.split("\n");
+                
+                StringBuilder csv = new StringBuilder();
+                csv.append("Timestamp,Source,Message\n");
+                
+                for (String line : lines) {
+                    // Parse [HH:mm:ss.SSS] TX/RX: Message format
+                    if (line.startsWith("[")) {
+                        int closeIndex = line.indexOf("]");
+                        String timestamp = line.substring(1, closeIndex);
+                        String rest = line.substring(closeIndex + 2);
+                        
+                        int colonIndex = rest.indexOf(":");
+                        String source = rest.substring(0, colonIndex).trim();
+                        String message = rest.substring(colonIndex + 1).trim();
+                        
+                        csv.append("\"").append(timestamp).append("\",");
+                        csv.append("\"").append(source).append("\",");
+                        csv.append("\"").append(message).append("\"\n");
+                    }
+                }
+                
+                Files.writeString(Path.of(fileChooser.getSelectedFile().getPath()), csv.toString());
+                logger.info("Exported data to CSV: {}", fileChooser.getSelectedFile().getPath());
+            } catch (IOException ex) {
+                logger.error("Error exporting CSV: {}", ex.getMessage(), ex);
+                showError("Error exporting CSV: " + ex.getMessage());
+            }
+        }
+    }
+
+    private void exportAsJSON() {
+        var fileChooser = new JFileChooser();
+        fileChooser.setSelectedFile(new java.io.File("output.json"));
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            try {
+                String text = outputArea.getText();
+                String[] lines = text.split("\n");
+                
+                StringBuilder json = new StringBuilder();
+                json.append("{\n  \"messages\": [\n");
+                
+                boolean first = true;
+                for (String line : lines) {
+                    // Parse [HH:mm:ss.SSS] TX/RX: Message format
+                    if (line.startsWith("[")) {
+                        if (!first) json.append(",\n");
+                        first = false;
+                        
+                        int closeIndex = line.indexOf("]");
+                        String timestamp = line.substring(1, closeIndex);
+                        String rest = line.substring(closeIndex + 2);
+                        
+                        int colonIndex = rest.indexOf(":");
+                        String source = rest.substring(0, colonIndex).trim();
+                        String message = rest.substring(colonIndex + 1).trim();
+                        
+                        json.append("    {\n");
+                        json.append("      \"timestamp\": \"").append(escapeJson(timestamp)).append("\",\n");
+                        json.append("      \"source\": \"").append(escapeJson(source)).append("\",\n");
+                        json.append("      \"message\": \"").append(escapeJson(message)).append("\"\n");
+                        json.append("    }");
+                    }
+                }
+                
+                json.append("\n  ]\n}\n");
+                Files.writeString(Path.of(fileChooser.getSelectedFile().getPath()), json.toString());
+                logger.info("Exported data to JSON: {}", fileChooser.getSelectedFile().getPath());
+            } catch (IOException ex) {
+                logger.error("Error exporting JSON: {}", ex.getMessage(), ex);
+                showError("Error exporting JSON: " + ex.getMessage());
+            }
+        }
+    }
+
+    private String escapeJson(String str) {
+        return str.replace("\"", "\\\"")
+                  .replace("\\", "\\\\")
+                  .replace("\n", "\\n")
+                  .replace("\r", "\\r")
+                  .replace("\t", "\\t");
     }
 
     private void showSettingsDialog() {
