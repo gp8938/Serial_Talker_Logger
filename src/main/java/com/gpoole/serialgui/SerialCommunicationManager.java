@@ -4,6 +4,8 @@ import jssc.SerialPort;
 import jssc.SerialPortEvent;
 import jssc.SerialPortEventListener;
 import jssc.SerialPortException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -12,6 +14,7 @@ import java.util.function.Function;
  * Handles connection, disconnection, data sending/receiving, and event notifications.
  */
 public class SerialCommunicationManager {
+    private static final Logger logger = LoggerFactory.getLogger(SerialCommunicationManager.class);
     private final Function<String, SerialPort> serialPortFactory;
     private final int defaultDataBits;
     private final int defaultStopBits;
@@ -90,6 +93,7 @@ public class SerialCommunicationManager {
      */
     public boolean connect(String portName, int baudRate, int dataBits, int stopBits, int parity) {
         try {
+            logger.info("Opening serial port: {} at {} baud", portName, baudRate);
             activePort = serialPortFactory.apply(portName);
             if (activePort.openPort()) {
                 activePort.setParams(baudRate, dataBits, stopBits, parity);
@@ -102,13 +106,16 @@ public class SerialCommunicationManager {
                 connectionStartTime = System.currentTimeMillis();
                 connected = true;
 
+                logger.info("Successfully connected to port: {}", portName);
                 onConnected.accept(portName);
                 return true;
             } else {
+                logger.error("Failed to open port: {}", portName);
                 onError.accept("Failed to open port: " + portName);
                 return false;
             }
         } catch (SerialPortException ex) {
+            logger.error("Error opening port: {}", ex.getMessage(), ex);
             onError.accept("Error opening port: " + ex.getMessage());
             return false;
         }
@@ -137,12 +144,13 @@ public class SerialCommunicationManager {
     public void disconnect() {
         if (activePort != null) {
             try {
+                logger.info("Closing serial port");
                 if (portListener != null) {
                     activePort.removeEventListener();
                 }
                 activePort.closePort();
             } catch (SerialPortException ex) {
-                // Ignore close errors
+                logger.error("Error closing port: {}", ex.getMessage(), ex);
             } finally {
                 activePort = null;
                 portListener = null;

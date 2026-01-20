@@ -5,6 +5,8 @@ import jssc.SerialPortEvent;
 import jssc.SerialPortEventListener;
 import jssc.SerialPortException;
 import jssc.SerialPortList;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.awt.*;
@@ -22,6 +24,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class Gui extends JFrame {
+    private static final Logger logger = LoggerFactory.getLogger(Gui.class);
+    
     private final JTextArea outputArea;
     private final JComboBox<String> portsDropdown;
     private final JButton connectButton;
@@ -282,19 +286,24 @@ public class Gui extends JFrame {
     private void connectToSerialPort() {
         String selectedPort = (String) portsDropdown.getSelectedItem();
         if (selectedPort == null || "No COM ports found".equals(selectedPort)) {
+            logger.warn("Connection attempt with no port selected");
             showError("No port selected");
             return;
         }
 
         try {
+            logger.info("Attempting to connect to port: {}", selectedPort);
             int actualBaudRate = baudRate;
             if (autoNegotiateSpeed) {
+                logger.debug("Auto-negotiating baud rate");
                 actualBaudRate = BaudRateNegotiator.negotiate(
                     serialPortFactory.apply(selectedPort), dataBits, stopBits, parity
                 );
                 if (actualBaudRate > 0) {
+                    logger.info("Auto-negotiated baud rate: {}", actualBaudRate);
                     outputArea.append(messageFormatter.format("Auto-negotiated baud rate: " + actualBaudRate, false) + "\n");
                 } else {
+                    logger.warn("Failed to negotiate baud rate. Using default: {}", baudRate);
                     showError("Failed to negotiate baud rate. Using default: " + baudRate);
                     actualBaudRate = baudRate;
                 }
@@ -302,6 +311,7 @@ public class Gui extends JFrame {
             
             commManager.connect(selectedPort, actualBaudRate, dataBits, stopBits, parity);
         } catch (Exception ex) {
+            logger.error("Error opening port: {}", ex.getMessage(), ex);
             showError("Error opening port: " + ex.getMessage());
         }
     }
@@ -336,14 +346,17 @@ public class Gui extends JFrame {
 
     private void sendSerialMessage(String message) {
         if (!commManager.isConnected()) {
+            logger.warn("Send attempt while not connected");
             showError("Not connected to any port");
             return;
         }
 
         try {
+            logger.debug("Sending message: {}", message);
             commManager.sendMessage(message);
             outputArea.append(messageFormatter.format(message, false) + "\n");
         } catch (Exception ex) {
+            logger.error("Error sending data: {}", ex.getMessage(), ex);
             showError("Error sending data: " + ex.getMessage());
         }
     }
