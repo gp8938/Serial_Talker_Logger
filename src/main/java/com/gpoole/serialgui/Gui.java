@@ -45,6 +45,7 @@ public class Gui extends JFrame {
     private final JComboBox<String> portsDropdown;
     private final JButton connectButton;
     private final JTextField messageInput;
+    private JLabel connectionStatusLabel;
     private boolean autoNegotiateSpeed = false;
     private boolean noPortsWarningShown = false;
     private int baudRate = 9600;
@@ -170,17 +171,29 @@ public class Gui extends JFrame {
     private void setupMainPanel() {
         var mainPanel = new JPanel(new BorderLayout());
         
-        // Output area with scroll
+        // Output area with scroll - takes most of the space
         outputArea.setEditable(false);
+        outputArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11));
         var scrollPane = new JScrollPane(outputArea);
+        scrollPane.setBorder(BorderFactory.createTitledBorder("Communication Log"));
         mainPanel.add(scrollPane, BorderLayout.CENTER);
         
-        // Input panel on the right
+        // Input panel at the bottom for natural workflow
         var inputPanel = new JPanel(new BorderLayout(5, 5));
         inputPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        inputPanel.add(new JLabel("Message:"), BorderLayout.NORTH);
-        inputPanel.add(messageInput, BorderLayout.CENTER);
-        var sendButton = new JButton("Send");
+        inputPanel.setBackground(outputArea.getBackground());
+        
+        var inputLabelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        inputLabelPanel.setBackground(outputArea.getBackground());
+        inputLabelPanel.add(new JLabel("Message:"));
+        inputLabelPanel.setPreferredSize(new Dimension(100, 25));
+        
+        var commandPanel = new JPanel(new BorderLayout(5, 0));
+        commandPanel.setBackground(outputArea.getBackground());
+        commandPanel.add(messageInput, BorderLayout.CENTER);
+        
+        var sendButton = new JButton("Send (Ctrl+Enter)");
+        sendButton.setToolTipText("Send message or press Ctrl+Enter");
         sendButton.addActionListener(e -> {
             String message = messageInput.getText();
             sendSerialMessage(message);
@@ -189,7 +202,10 @@ public class Gui extends JFrame {
             }
             messageInput.setText("");
         });
-        inputPanel.add(sendButton, BorderLayout.SOUTH);
+        commandPanel.add(sendButton, BorderLayout.EAST);
+        
+        inputPanel.add(inputLabelPanel, BorderLayout.WEST);
+        inputPanel.add(commandPanel, BorderLayout.CENTER);
         
         // Add keyboard shortcuts
         messageInput.addKeyListener(new java.awt.event.KeyAdapter() {
@@ -234,7 +250,7 @@ public class Gui extends JFrame {
             }
         });
         
-        mainPanel.add(inputPanel, BorderLayout.EAST);
+        mainPanel.add(inputPanel, BorderLayout.SOUTH);
         add(mainPanel);
     }
 
@@ -244,6 +260,11 @@ public class Gui extends JFrame {
         // Add status LED indicator
         controlPanel.add(statusLED);
         
+        // Connection status label next to LED
+        connectionStatusLabel = new JLabel("Disconnected");
+        connectionStatusLabel.setToolTipText("Current connection status and details");
+        controlPanel.add(connectionStatusLabel);
+        
         controlPanel.add(new JLabel("Port:"));
         controlPanel.add(portsDropdown);
         
@@ -251,11 +272,23 @@ public class Gui extends JFrame {
         controlPanel.add(connectButton);
         
         var clearOutputButton = new JButton("Clear");
+        clearOutputButton.setToolTipText("Clear output area (Ctrl+L)");
         clearOutputButton.addActionListener(e -> outputArea.setText(""));
         controlPanel.add(clearOutputButton);
         
         var scrollLockCheckbox = new JCheckBox("Scroll Lock");
-        scrollLockCheckbox.addActionListener(e -> scrollLocked = scrollLockCheckbox.isSelected());
+        scrollLockCheckbox.setToolTipText("Pause output without disconnecting. Messages will be buffered.");
+        scrollLockCheckbox.addActionListener(e -> {
+            scrollLocked = scrollLockCheckbox.isSelected();
+            // Visual feedback when scroll lock active
+            if (scrollLocked) {
+                outputArea.setBackground(new Color(255, 255, 200)); // Light yellow
+                outputArea.setToolTipText("Scroll Lock active - new messages are buffered");
+            } else {
+                outputArea.setBackground(Color.WHITE);
+                outputArea.setToolTipText("Communication log");
+            }
+        });
         controlPanel.add(scrollLockCheckbox);
         
         add(controlPanel, BorderLayout.NORTH);
@@ -266,7 +299,7 @@ public class Gui extends JFrame {
         statusBar.add(statusLabel);
         add(statusBar, BorderLayout.SOUTH);
         
-        // Update status periodically
+        // Update status and connection label periodically
         var statusUpdater = Executors.newScheduledThreadPool(1, runnable -> {
             Thread t = new Thread(runnable, "status-updater");
             t.setDaemon(true);
@@ -373,7 +406,11 @@ public class Gui extends JFrame {
         SwingUtilities.invokeLater(() -> {
             connectButton.setText("Disconnect");
             statusLED.setConnected(true);
+            String statusText = String.format("Connected to %s @ %d baud", portName, baudRate);
+            connectionStatusLabel.setText(statusText);
+            connectionStatusLabel.setForeground(new Color(0, 128, 0)); // Green
             outputArea.append(messageFormatter.format("Connected to " + portName, false) + "\n");
+            logger.info("Connection status updated: {}", statusText);
         });
     }
 
@@ -381,6 +418,8 @@ public class Gui extends JFrame {
         SwingUtilities.invokeLater(() -> {
             connectButton.setText("Connect");
             statusLED.setConnected(false);
+            connectionStatusLabel.setText("Disconnected");
+            connectionStatusLabel.setForeground(new Color(192, 0, 0)); // Dark red
             outputArea.append(messageFormatter.format("Disconnected: " + reason, false) + "\n");
         });
     }
