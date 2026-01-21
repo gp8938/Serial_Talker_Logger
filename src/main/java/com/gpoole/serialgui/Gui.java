@@ -6,6 +6,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DefaultHighlighter;
+import javax.swing.text.Highlighter;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -60,6 +63,9 @@ public class Gui extends JFrame {
     private boolean scrollLocked = false;
     private JLabel statusLabel;
     private final CommandHistory commandHistory;
+    private final StringBuilder bufferedMessages = new StringBuilder();
+    private final Highlighter.HighlightPainter highlightPainter =
+        new DefaultHighlighter.DefaultHighlightPainter(new Color(255, 255, 0, 160));
 
     public Gui() {
         this(true, SerialPortList::getPortNames, null, SerialPort::new);
@@ -157,6 +163,7 @@ public class Gui extends JFrame {
         settingsMenu.add(settingsItem);
         settingsMenu.addSeparator();
         var autoNegotiateItem = new JCheckBoxMenuItem("Auto-Negotiate Speed");
+        autoNegotiateItem.setSelected(autoNegotiateSpeed);
         autoNegotiateItem.addActionListener(e -> autoNegotiateSpeed = autoNegotiateItem.isSelected());
         settingsMenu.add(autoNegotiateItem);
         
@@ -284,6 +291,7 @@ public class Gui extends JFrame {
             } else {
                 outputArea.setBackground(Color.WHITE);
                 outputArea.setToolTipText("Communication log");
+                flushBufferedMessages();
             }
         });
         controlPanel.add(scrollLockCheckbox);
@@ -371,9 +379,25 @@ public class Gui extends JFrame {
             int actualBaudRate = baudRate;
             if (autoNegotiateSpeed) {
                 logger.debug("Auto-negotiating baud rate");
-                actualBaudRate = BaudRateNegotiator.negotiate(
-                    serialPortFactory.apply(selectedPort), dataBits, stopBits, parity
-                );
+                SerialPort probePort = serialPortFactory.apply(selectedPort);
+                try {
+                    if (!probePort.openPort()) {
+                        showError("Failed to open port for negotiation: " + selectedPort);
+                        actualBaudRate = baudRate;
+                    } else {
+                        actualBaudRate = BaudRateNegotiator.negotiate(
+                            probePort, dataBits, stopBits, parity
+                        );
+                    }
+                } finally {
+                    try {
+                        if (probePort.isOpened()) {
+                            probePort.closePort();
+                        }
+                    } catch (Exception ex) {
+                        logger.warn("Failed to close negotiation port: {}", ex.getMessage());
+                    }
+                }
                 if (actualBaudRate > 0) {
                     logger.info("Auto-negotiated baud rate: {}", actualBaudRate);
                     outputArea.append(messageFormatter.format("Auto-negotiated baud rate: " + actualBaudRate, false) + "\n");
@@ -383,7 +407,7 @@ public class Gui extends JFrame {
                     actualBaudRate = baudRate;
                 }
             }
-            
+            baudRate = actualBaudRate;
             commManager.connect(selectedPort, actualBaudRate, dataBits, stopBits, parity);
         } catch (Exception ex) {
             logger.error("Error opening port: {}", ex.getMessage(), ex);
@@ -392,11 +416,14 @@ public class Gui extends JFrame {
     }
 
     private void onDataReceived(String data) {
-        if (!scrollLocked) {
-            SwingUtilities.invokeLater(() ->
-                outputArea.append(messageFormatter.format(data, true) + "\n")
-            );
+        String formatted = messageFormatter.format(data, true) + "\n";
+        if (scrollLocked) {
+            synchronized (bufferedMessages) {
+                bufferedMessages.append(formatted);
+            }
+            return;
         }
+        SwingUtilities.invokeLater(() -> outputArea.append(formatted));
     }
 
     private void onConnected(String portName) {
@@ -548,15 +575,37 @@ public class Gui extends JFrame {
     }
 
     private void highlightAllMatches(String searchTerm) {
-        // Highlight all matches by finding them all and displaying count
+        Highlighter highlighter = outputArea.getHighlighter();
+        highlighter.removeAllHighlights();
+        if (searchTerm == null || searchTerm.isEmpty()) {
+            return;
+        }
+
         String text = outputArea.getText();
         int count = 0;
         int index = 0;
         while ((index = text.indexOf(searchTerm, index)) != -1) {
             count++;
+            try {
+                highlighter.addHighlight(index, index + searchTerm.length(), highlightPainter);
+            } catch (BadLocationException ex) {
+                logger.warn("Failed to highlight match at {}: {}", index, ex.getMessage());
+            }
             index += searchTerm.length();
         }
         logger.debug("Found {} matches for '{}'", count, searchTerm);
+    }
+
+    private void flushBufferedMessages() {
+        final String buffered;
+        synchronized (bufferedMessages) {
+            if (bufferedMessages.length() == 0) {
+                return;
+            }
+            buffered = bufferedMessages.toString();
+            bufferedMessages.setLength(0);
+        }
+        SwingUtilities.invokeLater(() -> outputArea.append(buffered));
     }
 
     private void exportAsCSV() {
@@ -661,7 +710,11 @@ public class Gui extends JFrame {
         
         var displayModeOptions = List.of("ASCII", "HEX", "HEX and ASCII");
         var displayModeDropdown = new JComboBox<>(displayModeOptions.toArray(new String[0]));
-        displayModeDropdown.setSelectedIndex(0);
+        displayModeDropdown.setSelectedIndex(switch (messageFormatter.getDisplayMode()) {
+            case ASCII -> 0;
+            case HEX -> 1;
+            case HEX_AND_ASCII -> 2;
+        });
         
         var dataBitsField = new JTextField(String.valueOf(dataBits));
         var stopBitsField = new JTextField(String.valueOf(stopBits));
@@ -740,6 +793,12 @@ public class Gui extends JFrame {
         stopBits = config.getInt(ConfigurationManager.KEY_STOP_BITS, SerialPort.STOPBITS_1);
         parity = config.getInt(ConfigurationManager.KEY_PARITY, SerialPort.PARITY_NONE);
         autoNegotiateSpeed = config.getBoolean(ConfigurationManager.KEY_AUTO_NEGOTIATE, false);
+        String mode = config.getString(ConfigurationManager.KEY_DISPLAY_MODE, MessageFormatter.DisplayMode.ASCII.name());
+        try {
+            messageFormatter.setDisplayMode(MessageFormatter.DisplayMode.valueOf(mode));
+        } catch (IllegalArgumentException ex) {
+            messageFormatter.setDisplayMode(MessageFormatter.DisplayMode.ASCII);
+        }
         
         int width = config.getInt(ConfigurationManager.KEY_WINDOW_WIDTH, 800);
         int height = config.getInt(ConfigurationManager.KEY_WINDOW_HEIGHT, 600);

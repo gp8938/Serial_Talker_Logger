@@ -91,4 +91,13 @@ public class MessageFormatter {
     public void setDisplayMode(DisplayMode mode) {
         this.displayMode = mode;
     }
+
+    /**
+     * Gets the current display mode.
+     *
+     * @return Current display mode
+     */
+    public DisplayMode getDisplayMode() {
+        return displayMode;
+    }
 }
