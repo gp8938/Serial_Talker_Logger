@@ -1,9 +1,6 @@
 package com.gpoole.serialgui;
 
 import jssc.SerialPort;
-import jssc.SerialPortEvent;
-import jssc.SerialPortEventListener;
-import jssc.SerialPortException;
 import jssc.SerialPortList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -50,6 +50,17 @@ public class SerialCommunicationManager {
     }
 
     /**
+     * Connects to a serial port using the default serial parameters.
+     *
+     * @param portName The name of the port (e.g., "COM1")
+     * @param baudRate The baud rate
+     * @return True if connection was successful
+     */
+    public boolean connect(String portName, int baudRate) {
+        return connect(portName, baudRate, defaultDataBits, defaultStopBits, defaultParity);
+    }
+
+    /**
      * Sets the callback for when data is received.
      */
     public SerialCommunicationManager onDataReceived(Consumer<String> callback) {

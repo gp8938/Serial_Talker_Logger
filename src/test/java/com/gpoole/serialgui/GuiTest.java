@@ -4,7 +4,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import jssc.SerialPort;
-import jssc.SerialPortEvent;
 import jssc.SerialPortEventListener;
 import jssc.SerialPortException;
 import javax.swing.*;
@@ -71,12 +70,13 @@ class GuiTest {
         JMenuItem settingsItem = findMenuItem(settingsMenu, "Settings");
 
         assertNotNull(saveItem, "Save item should exist");
+        assertNotNull(csvItem, "CSV item should exist");
+        assertNotNull(jsonItem, "JSON item should exist");
         assertNotNull(exitItem, "Exit item should exist");
         assertNotNull(settingsItem, "Settings item should exist");
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void updateAvailablePortsPopulatesDropdown() throws Exception {
         testPortNames.set(new String[] {"COM1", "COM2"});
 
@@ -85,16 +85,15 @@ class GuiTest {
             return null;
         });
 
-        JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "portsDropdown", JComboBox.class));
+        JComboBox<String> dropdown = runOnEdt(() -> getPortsDropdown(gui));
         assertEquals(2, dropdown.getItemCount());
         assertEquals("COM1", dropdown.getItemAt(0));
         assertEquals("COM2", dropdown.getItemAt(1));
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void updateAvailablePortsKeepsSelection() throws Exception {
-        JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "portsDropdown", JComboBox.class));
+        JComboBox<String> dropdown = runOnEdt(() -> getPortsDropdown(gui));
 
         runOnEdt(() -> {
             dropdown.addItem("COM3");
@@ -124,7 +123,7 @@ class GuiTest {
             return null;
         });
 
-        JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "portsDropdown", JComboBox.class));
+        JComboBox<String> dropdown = runOnEdt(() -> getPortsDropdown(gui));
         JButton connectButton = runOnEdt(() -> getField(gui, "connectButton", JButton.class));
 
         assertEquals("No COM ports found", dropdown.getSelectedItem());
@@ -139,7 +138,7 @@ class GuiTest {
         JButton connectButton = runOnEdt(() -> getField(gui, "connectButton", JButton.class));
 
         runOnEdt(() -> {
-            JComboBox<String> dropdown = getField(gui, "portsDropdown", JComboBox.class);
+            JComboBox<String> dropdown = getPortsDropdown(gui);
             dropdown.removeAllItems();
             dropdown.setSelectedItem(null);
             return null;
@@ -171,9 +170,10 @@ class GuiTest {
         });
 
         JButton connectButton = runOnEdt(() -> getField(gui, "connectButton", JButton.class));
-        JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "portsDropdown", JComboBox.class));
+        JComboBox<String> dropdown = runOnEdt(() -> getPortsDropdown(gui));
         JTextField messageInput = runOnEdt(() -> getField(gui, "messageInput", JTextField.class));
 
+        assertNotNull(connectButton);
         assertEquals("COM1", dropdown.getSelectedItem());
 
         // Verify text input field exists and is functional
@@ -216,7 +216,7 @@ class GuiTest {
         });
 
         JButton connectButton = runOnEdt(() -> getField(gui, "connectButton", JButton.class));
-        JComboBox<String> dropdown = runOnEdt(() -> getField(gui, "portsDropdown", JComboBox.class));
+        JComboBox<String> dropdown = runOnEdt(() -> getPortsDropdown(gui));
 
         runOnEdt(() -> {
             dropdown.setSelectedItem("COM1");
@@ -260,10 +260,9 @@ class GuiTest {
         executor.shutdownNow();
     }
 
-    private static boolean getBooleanField(Object target, String fieldName) throws Exception {
-        Field field = target.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        return field.getBoolean(target);
+    @SuppressWarnings("unchecked")
+    private static JComboBox<String> getPortsDropdown(Gui gui) throws Exception {
+        return (JComboBox<String>) getField(gui, "portsDropdown", JComboBox.class);
     }
 
     private static <T> T getField(Object target, String fieldName, Class<T> type) throws Exception {
@@ -287,8 +286,6 @@ class GuiTest {
      */
     static class MockSerialPort extends SerialPort {
         private boolean portOpen = false;
-        private SerialPortEventListener eventListener;
-        private int eventMask;
         private StringBuilder writeBuffer = new StringBuilder();
         private StringBuilder readBuffer = new StringBuilder();
         private int currentBaudRate;
@@ -336,13 +333,11 @@ class GuiTest {
 
         @Override
         public void addEventListener(SerialPortEventListener listener, int eventMask) throws SerialPortException {
-            this.eventListener = listener;
-            this.eventMask = eventMask;
+            // No-op for mock
         }
 
         @Override
         public boolean removeEventListener() throws SerialPortException {
-            this.eventListener = null;
             return true;
         }
 
