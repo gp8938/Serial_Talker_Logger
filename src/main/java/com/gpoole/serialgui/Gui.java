@@ -779,6 +779,21 @@ public class Gui extends JFrame {
 
         settingsPanel.add(new JLabel("Line Ending:"));
         settingsPanel.add(lineEndingDropdown);
+
+        var autoLogCheckbox = new JCheckBox("Enable Auto-Log");
+        autoLogCheckbox.setSelected(autoLogManager.isEnabled());
+
+        var logFileField = new JTextField(config.getString(ConfigurationManager.KEY_AUTO_LOG_PATH, "serial.log"), 20);
+        logFileField.setEnabled(autoLogCheckbox.isSelected());
+
+        autoLogCheckbox.addActionListener(e -> {
+            logFileField.setEnabled(autoLogCheckbox.isSelected());
+        });
+
+        settingsPanel.add(new JLabel("Auto-Log:"));
+        settingsPanel.add(autoLogCheckbox);
+        settingsPanel.add(new JLabel("Log File:"));
+        settingsPanel.add(logFileField);
         
         if (JOptionPane.showConfirmDialog(this, settingsPanel, "Settings",
                 JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
@@ -815,6 +830,17 @@ public class Gui extends JFrame {
                     default -> "";
                 };
                 commManager.setLineEnding(ending);
+
+                boolean autoLogEnabled = autoLogCheckbox.isSelected();
+                String logPath = logFileField.getText().trim();
+                config.setBoolean(ConfigurationManager.KEY_AUTO_LOG_ENABLED, autoLogEnabled);
+                config.setString(ConfigurationManager.KEY_AUTO_LOG_PATH, logPath);
+
+                if (autoLogEnabled && !logPath.isEmpty()) {
+                    autoLogManager.enable(Path.of(logPath));
+                } else {
+                    autoLogManager.disable();
+                }
 
                 if (commManager.isConnected()) {
                     commManager.disconnect();
@@ -871,6 +897,12 @@ public class Gui extends JFrame {
         commManager.setLineEnding(ending);
 
         hexModeEnabled = config.getBoolean(ConfigurationManager.KEY_HEX_MODE, false);
+
+        boolean autoLogEnabled = config.getBoolean(ConfigurationManager.KEY_AUTO_LOG_ENABLED, false);
+        String logPath = config.getString(ConfigurationManager.KEY_AUTO_LOG_PATH, "serial.log");
+        if (autoLogEnabled && !logPath.isEmpty()) {
+            autoLogManager.enable(Path.of(logPath));
+        }
         
         int width = config.getInt(ConfigurationManager.KEY_WINDOW_WIDTH, 800);
         int height = config.getInt(ConfigurationManager.KEY_WINDOW_HEIGHT, 600);
