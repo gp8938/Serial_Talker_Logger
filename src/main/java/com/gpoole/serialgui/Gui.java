@@ -298,7 +298,17 @@ public class Gui extends JFrame {
             }
         });
         controlPanel.add(scrollLockCheckbox);
-        
+
+        var hexModeCheckbox = new JCheckBox("Hex Input");
+        hexModeCheckbox.setToolTipText("Parse input as hex (e.g., 48 65 6C 6C 6F)");
+        hexModeCheckbox.setSelected(hexModeEnabled);
+        hexModeCheckbox.addActionListener(e -> {
+            hexModeEnabled = hexModeCheckbox.isSelected();
+            config.setBoolean(ConfigurationManager.KEY_HEX_MODE, hexModeEnabled);
+            messageInput.setToolTipText(hexModeEnabled ? "Enter hex values (e.g., 48 65 6C 6C 6F)" : "Enter text message");
+        });
+        controlPanel.add(hexModeCheckbox);
+
         add(controlPanel, BorderLayout.NORTH);
         
         // Add status bar for metrics
@@ -427,6 +437,7 @@ public class Gui extends JFrame {
             return;
         }
         SwingUtilities.invokeLater(() -> outputArea.append(formatted));
+        autoLogManager.log("RX", data);
     }
 
     private void onConnected(String portName) {
@@ -463,12 +474,41 @@ public class Gui extends JFrame {
         }
 
         try {
-            logger.debug("Sending message: {}", message);
-            commManager.sendMessage(message);
-            outputArea.append(messageFormatter.format(message, false) + "\n");
+            if (hexModeEnabled) {
+                byte[] bytes = parseHexString(message);
+                if (bytes != null) {
+                    logger.debug("Sending hex bytes: {}", message);
+                    commManager.sendBytes(bytes);
+                    outputArea.append(messageFormatter.format("[Hex] " + message, false) + "\n");
+                    autoLogManager.log("TX", "[Hex] " + message);
+                } else {
+                    showError("Invalid hex format. Use space-separated pairs (e.g., 48 65 6C 6C 6F)");
+                    return;
+                }
+            } else {
+                logger.debug("Sending message: {}", message);
+                commManager.sendMessage(message);
+                outputArea.append(messageFormatter.format(message, false) + "\n");
+                autoLogManager.log("TX", message);
+            }
         } catch (Exception ex) {
             logger.error("Error sending data: {}", ex.getMessage(), ex);
             showError("Error sending data: " + ex.getMessage());
+        }
+    }
+
+    private byte[] parseHexString(String hex) {
+        try {
+            String cleaned = hex.trim().replaceAll("\\s+", " ");
+            String[] bytes = cleaned.split(" ");
+            byte[] result = new byte[bytes.length];
+            for (int i = 0; i < bytes.length; i++) {
+                if (bytes[i].length() != 2) return null;
+                result[i] = (byte) Integer.parseInt(bytes[i], 16);
+            }
+            return result;
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 
