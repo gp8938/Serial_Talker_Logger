@@ -26,6 +26,7 @@ public class SerialCommunicationManager {
     private long bytesSent = 0;
     private long bytesReceived = 0;
     private long connectionStartTime = 0;
+    private String lineEnding = "";
 
     private Consumer<String> onDataReceived;
     private Consumer<String> onError;
@@ -90,6 +91,13 @@ public class SerialCommunicationManager {
     public SerialCommunicationManager onDisconnected(Consumer<String> callback) {
         this.onDisconnected = callback;
         return this;
+    }
+
+    /**
+     * Sets the line ending to append to sent messages.
+     */
+    public void setLineEnding(String ending) {
+        this.lineEnding = ending;
     }
 
     /**
@@ -181,8 +189,23 @@ public class SerialCommunicationManager {
         if (!connected || activePort == null) {
             throw new SerialPortException("", "", "Not connected to any port");
         }
-        activePort.writeString(message);
-        bytesSent += message.length();
+        String fullMessage = message + lineEnding;
+        activePort.writeString(fullMessage);
+        bytesSent += fullMessage.length();
+    }
+
+    /**
+     * Sends raw bytes through the serial port.
+     *
+     * @param data The bytes to send
+     * @throws SerialPortException If not connected or write fails
+     */
+    public void sendBytes(byte[] data) throws SerialPortException {
+        if (!connected || activePort == null) {
+            throw new SerialPortException("", "", "Not connected to any port");
+        }
+        activePort.writeBytes(data);
+        bytesSent += data.length;
     }
 
     /**

@@ -64,6 +64,8 @@ public class Gui extends JFrame {
     private JLabel statusLabel;
     private final CommandHistory commandHistory;
     private final StringBuilder bufferedMessages = new StringBuilder();
+    private final AutoLogManager autoLogManager;
+    private boolean hexModeEnabled = false;
     private final Highlighter.HighlightPainter highlightPainter =
         new DefaultHighlighter.DefaultHighlightPainter(new Color(255, 255, 0, 160));
 
@@ -94,6 +96,7 @@ public class Gui extends JFrame {
         
         this.statusLED = new StatusLED();
         this.commandHistory = new CommandHistory();
+        this.autoLogManager = new AutoLogManager();
         
         portUpdater = Executors.newScheduledThreadPool(1, runnable -> {
             Thread t = new Thread(runnable, "port-list-updater");
@@ -729,6 +732,13 @@ public class Gui extends JFrame {
         settingsPanel.add(parityDropdown);
         settingsPanel.add(new JLabel("Display Mode:"));
         settingsPanel.add(displayModeDropdown);
+
+        var lineEndingOptions = List.of("None", "CR (\\r)", "LF (\\n)", "CRLF (\\r\\n)");
+        var lineEndingDropdown = new JComboBox<>(lineEndingOptions.toArray(new String[0]));
+        lineEndingDropdown.setSelectedIndex(config.getInt(ConfigurationManager.KEY_LINE_ENDING, ConfigurationManager.LINE_ENDING_NONE));
+
+        settingsPanel.add(new JLabel("Line Ending:"));
+        settingsPanel.add(lineEndingDropdown);
         
         if (JOptionPane.showConfirmDialog(this, settingsPanel, "Settings",
                 JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
@@ -751,10 +761,21 @@ public class Gui extends JFrame {
                     case 2 -> MessageFormatter.DisplayMode.HEX_AND_ASCII;
                     default -> MessageFormatter.DisplayMode.ASCII;
                 };
-                
+
                 config.setString(ConfigurationManager.KEY_DISPLAY_MODE, newMode.name());
                 messageFormatter.setDisplayMode(newMode);
-                
+
+                int lineEndingMode = lineEndingDropdown.getSelectedIndex();
+                config.setInt(ConfigurationManager.KEY_LINE_ENDING, lineEndingMode);
+
+                String ending = switch (lineEndingMode) {
+                    case ConfigurationManager.LINE_ENDING_CR -> "\r";
+                    case ConfigurationManager.LINE_ENDING_LF -> "\n";
+                    case ConfigurationManager.LINE_ENDING_CRLF -> "\r\n";
+                    default -> "";
+                };
+                commManager.setLineEnding(ending);
+
                 if (commManager.isConnected()) {
                     commManager.disconnect();
                     connectToSerialPort();
@@ -799,6 +820,17 @@ public class Gui extends JFrame {
         } catch (IllegalArgumentException ex) {
             messageFormatter.setDisplayMode(MessageFormatter.DisplayMode.ASCII);
         }
+
+        int lineEndingMode = config.getInt(ConfigurationManager.KEY_LINE_ENDING, ConfigurationManager.LINE_ENDING_NONE);
+        String ending = switch (lineEndingMode) {
+            case ConfigurationManager.LINE_ENDING_CR -> "\r";
+            case ConfigurationManager.LINE_ENDING_LF -> "\n";
+            case ConfigurationManager.LINE_ENDING_CRLF -> "\r\n";
+            default -> "";
+        };
+        commManager.setLineEnding(ending);
+
+        hexModeEnabled = config.getBoolean(ConfigurationManager.KEY_HEX_MODE, false);
         
         int width = config.getInt(ConfigurationManager.KEY_WINDOW_WIDTH, 800);
         int height = config.getInt(ConfigurationManager.KEY_WINDOW_HEIGHT, 600);

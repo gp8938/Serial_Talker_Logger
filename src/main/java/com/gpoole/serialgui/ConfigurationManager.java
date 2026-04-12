@@ -138,4 +138,15 @@ public class ConfigurationManager {
     public static final String KEY_WINDOW_Y = "ui.window.y";
     public static final String KEY_AUTO_NEGOTIATE = "serial.autonegotiate";
     public static final String KEY_DISPLAY_MODE = "ui.displaymode";
+
+    public static final String KEY_LINE_ENDING = "serial.lineending";
+    public static final int LINE_ENDING_NONE = 0;
+    public static final int LINE_ENDING_CR = 1;
+    public static final int LINE_ENDING_LF = 2;
+    public static final int LINE_ENDING_CRLF = 3;
+
+    public static final String KEY_HEX_MODE = "serial.hexmode";
+
+    public static final String KEY_AUTO_LOG_ENABLED = "log.auto.enabled";
+    public static final String KEY_AUTO_LOG_PATH = "log.auto.path";
 }
