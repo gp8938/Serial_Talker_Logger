@@ -690,8 +690,8 @@ public class Gui extends JFrame {
     }
 
     private String escapeJson(String str) {
-        return str.replace("\"", "\\\"")
-                  .replace("\\", "\\\\")
+        return str.replace("\\", "\\\\")
+                  .replace("\"", "\\\"")
                   .replace("\n", "\\n")
                   .replace("\r", "\\r")
                   .replace("\t", "\\t");
