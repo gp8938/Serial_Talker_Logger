@@ -66,10 +66,7 @@ public class BaudRateNegotiator {
             // Check if we have data to read
             if (port.getInputBufferBytesCount() > 0) {
                 String response = port.readString();
-                // Check for typical AT command responses (OK, ERROR, +, etc.)
-                if (response != null && !response.isEmpty() &&
-                    (response.contains("OK") || response.contains("ERROR") || 
-                     response.contains("+") || response.length() > 0)) {
+                if (response != null && !response.isEmpty()) {
                     return true;
                 }
             }

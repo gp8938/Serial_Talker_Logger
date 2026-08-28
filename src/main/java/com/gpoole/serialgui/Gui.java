@@ -318,12 +318,7 @@ public class Gui extends JFrame {
         add(statusBar, BorderLayout.SOUTH);
         
         // Update status and connection label periodically
-        var statusUpdater = Executors.newScheduledThreadPool(1, runnable -> {
-            Thread t = new Thread(runnable, "status-updater");
-            t.setDaemon(true);
-            return t;
-        });
-        statusUpdater.scheduleAtFixedRate(() -> {
+        portUpdater.scheduleAtFixedRate(() -> {
             final String status;
             status = String.format("Bytes Sent: %d | Bytes Received: %d", 
                 commManager.getBytesSent(), commManager.getBytesReceived());
@@ -534,7 +529,6 @@ public class Gui extends JFrame {
         var highlightCheckbox = new JCheckBox("Highlight All", false);
         
         var currentIndex = new int[]{0};
-        var lastSearchTerm = new String[]{""};
         
         Runnable performSearch = () -> {
             String searchTerm = searchField.getText();
@@ -573,7 +567,6 @@ public class Gui extends JFrame {
             public void keyPressed(java.awt.event.KeyEvent e) {
                 if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER) {
                     currentIndex[0] = 0;
-                    lastSearchTerm[0] = searchField.getText();
                     performSearch.run();
                 } else if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ESCAPE) {
                     JOptionPane.getRootFrame().dispose();

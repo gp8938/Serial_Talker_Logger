@@ -286,10 +286,7 @@ class GuiTest {
      */
     static class MockSerialPort extends SerialPort {
         private boolean portOpen = false;
-        private StringBuilder writeBuffer = new StringBuilder();
         private StringBuilder readBuffer = new StringBuilder();
-        private int currentBaudRate;
-        private final int[] supportedBaudRates = {9600, 14400, 19200, 28800, 38400, 57600, 115200};
 
         MockSerialPort(String portName) {
             super(portName);
@@ -309,13 +306,11 @@ class GuiTest {
 
         @Override
         public boolean setParams(int baudRate, int dataBits, int stopBits, int parity) throws SerialPortException {
-            this.currentBaudRate = baudRate;
             return true;
         }
 
         @Override
         public boolean writeString(String string) throws SerialPortException {
-            writeBuffer.append(string);
             // Simulate echo back of data
             readBuffer.append("ECHO: ").append(string);
             return true;
@@ -344,18 +339,6 @@ class GuiTest {
         @Override
         public boolean isOpened() {
             return portOpen;
-        }
-
-        public String getWriteBuffer() {
-            return writeBuffer.toString();
-        }
-
-        public int getCurrentBaudRate() {
-            return currentBaudRate;
-        }
-
-        public int[] getSupportedBaudRates() {
-            return supportedBaudRates;
         }
     }
 }

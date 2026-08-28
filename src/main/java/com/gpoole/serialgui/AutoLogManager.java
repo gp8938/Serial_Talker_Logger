@@ -21,7 +21,6 @@ public class AutoLogManager {
 
     private Path logFile;
     private boolean enabled = false;
-    private boolean rotateOnSize = true;
     private long currentSize = 0;
 
     /**
@@ -60,7 +59,7 @@ public class AutoLogManager {
             String entry = String.format("[%s] %s: %s%n", timestamp, direction, message);
             byte[] data = entry.getBytes();
 
-            if (rotateOnSize && currentSize + data.length > MAX_LOG_SIZE) {
+            if (currentSize + data.length > MAX_LOG_SIZE) {
                 rotateLog();
             }
 
@@ -80,12 +79,5 @@ public class AutoLogManager {
         Files.move(logFile, rotated);
         currentSize = 0;
         logger.info("Log rotated to: {}", rotated);
-    }
-
-    /**
-     * Gets current log file path.
-     */
-    public Path getLogFile() {
-        return logFile;
     }
 }

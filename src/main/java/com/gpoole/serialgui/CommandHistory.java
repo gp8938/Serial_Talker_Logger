@@ -97,20 +97,4 @@ public class CommandHistory {
         currentIndex = -1;
     }
 
-    /**
-     * Gets the total number of commands in history.
-     *
-     * @return History size
-     */
-    public int size() {
-        return history.size();
     }
-
-    /**
-     * Clears all history.
-     */
-    public void clear() {
-        history.clear();
-        currentIndex = -1;
-    }
-}
