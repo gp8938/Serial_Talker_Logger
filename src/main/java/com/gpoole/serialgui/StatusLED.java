@@ -36,15 +36,6 @@ public class StatusLED extends JPanel {
         repaint();
     }
 
-    /**
-     * Gets the current connection status.
-     *
-     * @return True if connected
-     */
-    public boolean isConnected() {
-        return connected;
-    }
-
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);

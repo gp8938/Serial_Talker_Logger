@@ -31,31 +31,6 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
             <scope>test</scope>
         </dependency>
     </dependencies>
-    <repositories>
-        <repository>
-            <id>central</id>
-            <url>https://repo.maven.apache.org/maven2</url>
-        </repository>
-        <repository>
-            <id>oss-sonatype</id>
-            <name>oss-sonatype</name>
-            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
-            <snapshots>
-                <enabled>true</enabled>
-            </snapshots>
-        </repository>
-        <repository>
-            <id>maven2-repository.dev.java.net</id>
-            <name>Java.net Repository for Maven</name>
-            <url>https://download.java.net/maven/2/</url>
-        </repository>
-        <!-- RxTx is available in the OpenMQ repository -->
-        <repository>
-            <id>openmq</id>
-            <name>Open Message Queue Repository</name>
-            <url>https://download.java.net/maven/2</url>
-        </repository>
-    </repositories>
     <build>
         <plugins>
             <plugin>
@@ -103,7 +78,7 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.5</version>
+                                <version>3.5.6</version>
                 <configuration>
                     <useModulePath>false</useModulePath>
                 </configuration>
