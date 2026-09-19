@@ -1,3 +1,17 @@
 /target
+/build
+/.gradle
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+.gradle/
+*.log
+.DS_Store
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*sources.txt
 .vscode
 dependency-reduced-pom.xml
