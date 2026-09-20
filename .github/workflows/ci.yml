@@ -12,16 +12,23 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java-version: ['21', '25']
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Set up JDK 21
+      - name: Set up JDK ${{ matrix.java-version }}
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '21'
-          cache: maven
+          java-version: ${{ matrix.java-version }}
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
 
       - name: Run tests
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" mvn -B -ntp test
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" ./gradlew test

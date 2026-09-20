@@ -63,7 +63,7 @@ public class CommandHistory {
         }
         if (currentIndex < 0) {
             currentIndex = history.size() - 1;
-        } else if (currentIndex > 0) {
+        } else if (currentIndex >= 0) {
             currentIndex--;
         }
         return currentIndex >= 0 && currentIndex < history.size()

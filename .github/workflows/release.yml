@@ -11,83 +11,68 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            profile: linux
+            artifact: serialtalkerlogger
           - os: macos-latest
-            profile: macos
+            artifact: serialtalkerlogger
           - os: windows-latest
-            profile: windows
+            artifact: serialtalkerlogger
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '25'
+          cache: gradle
 
-      - name: Cache Maven
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
 
-      - name: Build with Maven (profile)
-        run: |
-          mvn -B -P ${{ matrix.profile }} clean package
+      - name: Build with Gradle
+        run: ./gradlew clean build
 
       - name: Determine project version
         id: version
         shell: bash
         run: |
-          VER=$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout)
+          VER=$(./gradlew -q properties --configuration all | grep "^version:" | awk '{print $2}')
           echo "version=$VER" >> $GITHUB_OUTPUT
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
           name: serialtalkerlogger-${{ steps.version.outputs.version }}.jar
-          path: target/serialtalkerlogger-${{ steps.version.outputs.version }}.jar
+          path: build/libs/serialtalkerlogger-${{ steps.version.outputs.version }}.jar
 
-      - name: Upload platform package
-        uses: actions/upload-artifact@v4
-        with:
-          name: package-${{ matrix.profile }}-${{ steps.version.outputs.version }}
-          path: |
-            target/*.dmg
-            target/*.msi
-            target/*.deb
-          if-no-files-found: warn
-  
   create-release:
     needs: [build]
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-      
+
       - name: Extract version from tag
         id: version
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Release version: $VERSION"
-      
+
       - name: Create Release Notes
         id: release-notes
         run: |
           NOTES="# Release ${{ steps.version.outputs.version }}"
           echo "$NOTES" > /tmp/release-notes.txt
           echo "See CHANGELOG.md for detailed changes." >> /tmp/release-notes.txt
-      
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
@@ -96,8 +81,6 @@ jobs:
           body_path: /tmp/release-notes.txt
           files: |
             artifacts/serialtalkerlogger-*.jar/*.jar
-            artifacts/package-windows-*/**/*.msi
-            artifacts/package-macos-*/**/*.dmg
             artifacts/package-linux-*/**/*.deb
             artifacts/package-linux-*/**/*.AppImage
           draft: false
